@@ -28,6 +28,7 @@ for scene in range(1, 8):
         # cell cycle is unique across scenes also, but that the
     for i0 in range(len(c)):
         c, cc = C.stitch_cycles(c, cc, i0)
+    print len(cc)
     # cc += cc
 cc = C.inherit_lineage_properties(cc)  # inheriting the lineage properties of related cells
 print len(cc), np.sum([1 for obj in cc if obj.complete and not(obj.daughter is None)])
