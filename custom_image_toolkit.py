@@ -1262,7 +1262,9 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
 
 def assign_troublesome_pair(temp_posn, temp_frame_num, temp_dir, temp_cell_num, temp_scene):
     # This will prompt the user to find the position of the partner cell at that timepoint and add it to a .txt tab
-    # delimited file for this scene and frame number
+    # delimited file for this scene and frame number. The format should be
+    # cell  X   Y
+    # num   x1  y1
     print 'Assign pair cell for scene {0}, frame {1}, cell number {2}'.format(temp_scene, temp_frame_num,
                                                                               temp_cell_num)
     print 'position: ', temp_posn
@@ -1351,8 +1353,8 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                             # print d, temp_started_G1
                             d[ind2] = np.linalg.norm(temp_started_G1[2][ind1] - temp_started_G1[2][ind2])
 
-                    if temp_mothers[ind1]:  # if this cell is a mother then find the cells which haven't previously been
-                        # classified as mothers.
+                    if temp_mothers[ind1]:  # if this cell is a mother then look within the cells which haven't
+                        # previously been classified as mothers.
 
                         temp_inds = np.nonzero(temp_mothers == 0)
                         temp_ind2 = np.argsort(
@@ -1367,8 +1369,25 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                                     # with manual correction
                                     # pending_assignment[-1].append(temp_started_G1[0][ind1])
                                     # dir1 = temp_base_path + temp_expt_path
-                                    c = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
+                                    temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
                                                     directory, temp_started_G1[0][ind1], scene)
+                                    # Calculating the distance from this point to each cell that started G1 this
+                                    # cell cycle
+                                    d1 = np.ones(len(temp_started_G1[0]))
+                                    for ind2 in range(len(temp_started_G1[0])):
+                                            d1[ind2] = np.linalg.norm(
+                                                temp_started_G1[2][ind2] - temp_loc)
+                                    if np.amin(d1)<20 and np.amin(d1) in temp_inds[0]:
+                                        # if we can assign the point to a cell that has newly started G1
+                                        assigned_inds[0].append(temp_started_G1[0][ind1])
+                                        assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
+                                        c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
+                                                           daughter_ind=temp_started_G1[0][np.argmin(d1)],
+                                                           temp_frame_num=frame_num)
+                                        num_divisions += 1
+                                    else:
+                                        print 'Unable to assign a daughter in scene {0}, frame{1}, cell{2}'.format(
+                                            scene, frame_num, temp_started_G1[0][ind1])
                                 else:
                                     assigned_inds[0].append(temp_started_G1[0][ind1])
                                     assigned_inds[1].append(temp_started_G1[0][temp_inds[0][temp_ind2[0]]])
@@ -1387,8 +1406,25 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                                 # the same frame then we neglect this for now. This should ideally be developed later
                                 # with manual correction
                                 # pending_assignment[-1].append(temp_started_G1[0][ind1])
-                                c = assign_troublesome_pair(c, temp_started_G1[0][ind1], frame_num,
-                                                            temp_dir=temp_base_path + temp_expt_path)
+                                temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
+                                                                   directory, temp_started_G1[0][ind1], scene)
+                                # Calculating the distance from this point to each cell that started G1 this
+                                # cell cycle
+                                d1 = np.ones(len(temp_started_G1[0]))
+                                for ind2 in range(len(temp_started_G1[0])):
+                                    d1[ind2] = np.linalg.norm(
+                                        temp_started_G1[2][ind2] - temp_loc)
+                                if np.amin(d1) < 20:
+                                    # if we can assign the point to a cell that has newly started G1
+                                    assigned_inds[0].append(temp_started_G1[0][ind1])
+                                    assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
+                                    c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
+                                                       daughter_ind=temp_started_G1[0][np.argmin(d1)],
+                                                       temp_frame_num=frame_num)
+                                    num_divisions += 1
+                                else:
+                                    print 'Unable to assign a daughter in scene {0}, frame{1}, cell{2}'.format(
+                                        scene, frame_num, temp_started_G1[0][ind1])
                             else:  # we add a new pair
                                 temp_inds1 = [temp_started_G1[0][ind1], temp_started_G1[0][temp_ind2[0]]]
                                 # print temp_inds1
