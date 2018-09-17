@@ -1289,6 +1289,47 @@ def assign_troublesome_pair(temp_posn, temp_frame_num, temp_dir, temp_cell_num, 
     return temp_posn_partner
 
 
+def determine_mothers(temp_cells, temp_frame_num, temp_inds):
+    # This will take two cells, and assign mother vs daughter, preferentially using previously known lineage data but
+    # otherwise using size data. If both cells are known to be mother cells, we return an error.
+    temp_inds1 = None
+    temp_mother_vec = np.array([(len(temp_cells[temp_ind].daughters) > 0) for temp_ind in temp_inds])
+    if np.sum(temp_mother_vec) == 1:
+        temp_inds2 = [i for i, x in enumerate(temp_mother_vec) if x]
+        temp_inds1 = [temp_inds[temp_inds2[0]], temp_inds[temp_inds2[0]-1]]  # gives the index of mother first, then
+        # daughter
+    elif np.sum(temp_mother_vec) == 0:  # if no cells are mothers we report the mother as the larger of the two cells.
+        temp_val = [temp_cells[temp_inds[0]].ellipse_volume[temp_frame_num - temp_cells[temp_inds[0]].frames[0]],
+                    temp_cells[temp_inds[1]].ellipse_volume[temp_frame_num - temp_cells[temp_inds[1]].frames[0]]]
+        # print temp_val
+        m_ind = np.argmax(temp_val)
+        temp_inds1 = [temp_inds[m_ind], temp_inds[m_ind-1]] # gives the index of mother first, then
+        # daughter
+    if temp_inds1 is None:
+        print 'Tried to assign a mother-mother pairing at division in frame {0}'.format(temp_frame_num)
+    return temp_inds1
+
+
+def test_tree(temp_conn_mat, temp_assigned, temp_ind):
+    # classifies the branch and classification structure. temp_type = 0 must be added to pending_assignment, temp_type=1
+    # must be assigned to its pair, and temp_type=2 requires manual assignment
+    temp_sum = np.sum(temp_conn_mat[temp_ind, :], axis=0)
+    if temp_sum == 0:
+        temp_type = 0  # if there is no prospective pair
+    elif temp_sum == 1:
+        temp_ind1 = np.nonzero(temp_conn_mat[temp_ind, :])[0][0]
+        if not(temp_assigned[temp_ind1]):  # if the prospective pair cell has not been assigned yet
+            if np.sum(temp_conn_mat[temp_ind1, :])==1:
+                temp_type = 1  # if this is a regular tree with two pairs that are unassigned.
+            else:
+                temp_type = 2  # if the other cell has more than one pair, then this needs to be manually assigned
+        else:  # if the prospective pair has already been assigned to another cell
+            temp_type = 0
+    elif temp_sum>1:
+        temp_type = 2  # if there is more than one prospective pair then this requires manual assignment
+    return temp_type
+
+
 def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename, temp_num_frames,
                               temp_analyzed_scene, temp_num_scenes, temp_threshold, temp_drange):
     # This function takes as inputs the current cells with specified Whi5 localization, and assigns lineages
@@ -1328,8 +1369,9 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                 temp_started_G1 = [[], [], []]
                 for ind1 in update_list1:
                     temp_ind = frame_num - c[ind1].frames[0]  # cell age
-                    if temp_ind == 0:  # if this cell was segmented for the first time in this frame then we store that,
-                        # but we don't do much with it for now.
+                    if temp_ind == 0:  # if this cell was segmented for the first time in this frame then we don't use
+                        # that since erroneous classification happens quite a lot for very small cells due to poor
+                        # segmentation.
                         print 'Newborn cell {0} with nuclear Whi5 found in timepoint {1}'.format(c[ind1].index,
                                                                                                  frame_num)
                         temp_new[0].append(ind1)
@@ -1351,34 +1393,82 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                 temp_mothers = np.array([(len(c[temp_ind1].daughters) > 0) for temp_ind1 in temp_started_G1[0]])
                 # tracking whether these cells have already been mothers.
                 to_remove = [[], []]
-
+                assigned = np.zeros(len(temp_started_G1[0]))  # This will track whether a cell has already been assigned
+                # We use this to avoid multiple assignments
+                dist_mat = np.zeros([len(temp_started_G1[0]), temp_started_G1[0]]) # matrix of distances between cell
+                # i and j for dist_mat[i,j]
+                dist_mat += (distance_cutoff+1000.0)*np.identity(len(temp_started_G1[0]))  # prevent cells partnering
+                # themselves.
+                for ind1 in range(len(temp_started_G1[0])):
+                    for ind2 in range(len(temp_started_G1[0])):
+                        if ind1 != ind2: # prevent cells partnering themselves.
+                            dist_mat[ind1, ind2] = np.linalg.norm(temp_started_G1[2][ind1] - temp_started_G1[2][ind2])
+                conn_mat = np.sum(dist_mat<distance_cutoff)
+                num_partners = np.sum(conn_mat, axis=0)
                 # We now go through each cell in temp_started_G1 and see what other cell it is closest to.
                 for ind1 in range(len(temp_started_G1[0])):
-                    # evaluating distances between cells
-                    d = 1000 * np.ones(len(temp_started_G1[0]))
-                    for ind2 in range(len(temp_started_G1[0])):
-                        if ind1 != ind2:
-                            # print d, temp_started_G1
-                            d[ind2] = np.linalg.norm(temp_started_G1[2][ind1] - temp_started_G1[2][ind2])
+                    if not(assigned[ind1]):  # if the current cell has not already been assigned
+                        # evaluating the number of candidate partners this cell has
+                        is_pair = test_tree(dist_mat < distance_cutoff, assigned, ind1)
+                        if is_pair == 1:  # this is the regular case
+                            temp_ind1 = np.nonzero(conn_mat[ind1, :])[0][0]
+                            inds1 = determine_mothers(c, frame_num,
+                                                      [temp_started_G1[0][ind1], temp_started_G1[0][temp_ind1]])
+                            if not(inds1 is None):  # if there wasn't a problem in assigning mother vs daughter
+                                assigned_inds[0].append(inds1[0])
+                                assigned_inds[1].append(inds1[1])
+                                c = assign_md_pair(c, mother_ind=temp_inds1[0],
+                                                   daughter_ind=temp_inds1[1],
+                                                   temp_frame_num=frame_num)
+                                assigned[ind1] = 1
+                                assigned[temp_ind1] = 1
+                                num_divisions += 1
+                        elif is_pair == 2:
+                            # If the pairing is ambiguous and this cell has not already been assigned then we have to
+                            # manually assign this.
+                            temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
+                                                               directory, temp_started_G1[0][ind1], scene)
+                            if not (temp_loc is None):  # if we were able to find a candidate
+                                # first we search for this within the list of cells for which Whi5 has just entered the
+                                # nucleus
+                                d1 = np.ones(len(temp_started_G1[0]))
+                                for ind2 in range(len(temp_started_G1[0])):
+                                    d1[ind2] = np.linalg.norm(
+                                        temp_started_G1[2][ind2] - temp_loc)
+                                if np.amin(d1) < 20:
+                                    # if we can assign the point to a cell that has newly started G1
+                                    inds1 = determine_mothers(c, frame_num,
+                                                              [temp_started_G1[0][ind1], temp_started_G1[0][np.argmin(d1)]])
+                                    assigned_inds[0].append(inds1[0])
+                                    assigned_inds[1].append(inds1[1])
+                                    c = assign_md_pair(c, mother_ind=inds1[0],
+                                                       daughter_ind=inds1[1],
+                                                       temp_frame_num=frame_num)
+                                    # tracking that these cells have been assigned
+                                    assigned[ind1]=1
+                                    assigned[np.argmin(d1)]=1
+                                    num_divisions += 1
+                                else:  # if we can't find a pair in the G1 population we simply record the division event
+                                    # but list the daughter as untracked.
+                                    # Need to DEAL WITH THIS PART
+                                    assigned[ind1]=1
 
                     if temp_mothers[ind1]:  # if this cell is a mother then look within the cells which haven't
                         # previously been classified as mothers.
 
                         temp_inds = np.nonzero(temp_mothers == 0)
                         temp_ind2 = np.argsort(
-                            d[temp_inds])  # ordering the indices of temp_inds based on their distance
+                            dist_mat[ind1, temp_inds])  # ordering the indices of temp_inds based on their distance
                         # print len(temp_inds), temp_ind2, temp_inds[0]
                         if len(temp_inds[0]) > 0:
                             if d[temp_inds[0][temp_ind2[0]]] < distance_cutoff:  # if the lowest distance is less than
                                 # the distance cutoff
-                                if sum(d[
-                                           temp_inds] < distance_cutoff) > 1:  # if there is another cell with low distance in
+                                if sum(d[temp_inds] < distance_cutoff) > 1:  # if there is another cell with low distance in
                                     # the same frame then we neglect this for now. This should ideally be developed later
                                     # with manual correction
                                     # pending_assignment[-1].append(temp_started_G1[0][ind1])
                                     # dir1 = temp_base_path + temp_expt_path
-                                    temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
-                                                    directory, temp_started_G1[0][ind1], scene)
+
                                     # Calculating the distance from this point to each cell that started G1 this
                                     # cell cycle
                                     if not(temp_loc is None):
@@ -1394,9 +1484,9 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                                                                daughter_ind=temp_started_G1[0][np.argmin(d1)],
                                                                temp_frame_num=frame_num)
                                             num_divisions += 1
-                                    else:
-                                        print 'Unable to assign a daughter in scene {0}, frame{1}, cell{2}'.format(
-                                            scene, frame_num, temp_started_G1[0][ind1])
+                                        else:
+                                            print 'Unable to assign a daughter in scene {0}, frame{1}, cell{2}'.format(
+                                                scene, frame_num, temp_started_G1[0][ind1])
                                 else:
                                     assigned_inds[0].append(temp_started_G1[0][ind1])
                                     assigned_inds[1].append(temp_started_G1[0][temp_inds[0][temp_ind2[0]]])
