@@ -17,6 +17,7 @@ from skimage import io
 import os
 from matplotlib import cm
 
+# helper
 
 class Cell(object):
     cellCount = 0  # total number of cells
