@@ -1268,15 +1268,23 @@ def assign_troublesome_pair(temp_posn, temp_frame_num, temp_dir, temp_cell_num, 
     # num   x1  y1
     print 'Assign pair cell for scene {0}, frame {1}, cell number {2}'.format(temp_scene, temp_frame_num,
                                                                               temp_cell_num)
+    temp_path = temp_dir+'/cell_coords/scene_{0}_frame_{1}.txt'.format(temp_scene, temp_frame_num)
     print 'position: ', temp_posn
-    temp_complete = input('Cell partner assigned: ')
     if not os.path.exists(temp_dir+'/cell_coords'):
         os.makedirs(temp_dir+'/cell_coords')
+    if not os.path.exists(temp_path):
+        f = open(temp_path,'w')
+        f.write('cell\tX\tY')
+        f.close()
+        print 'Current cell partner storage:'
+    with open(temp_path, 'r') as f:
+        print f.read()
+    temp_complete = input('Cell partner assigned: ')
     if temp_complete == 'y':
-        temp_posns_pd = pd.read_csv(temp_dir+'/cell_coords_scene_{0}_frame_{1}.csv'.format(temp_scene, temp_frame_num),
+        temp_posns_pd = pd.read_csv(temp_dir+'/cell_coords/scene_{0}_frame_{1}.txt'.format(temp_scene, temp_frame_num),
                                     sep='\t')
         temp1 = temp_posns_pd.cell == temp_cell_num
-        temp_posn_partner = np.array([temp_posns_pd[temp1].X[0], temp_posns_pd.Y[0]])
+        temp_posn_partner = np.array([temp_posns_pd[temp1]['X'].iloc[0], temp_posns_pd[temp1]['Y'].iloc[0]])
     else:
         temp_posn_partner = None
     return temp_posn_partner
@@ -1374,18 +1382,19 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                                                     directory, temp_started_G1[0][ind1], scene)
                                     # Calculating the distance from this point to each cell that started G1 this
                                     # cell cycle
-                                    d1 = np.ones(len(temp_started_G1[0]))
-                                    for ind2 in range(len(temp_started_G1[0])):
-                                            d1[ind2] = np.linalg.norm(
-                                                temp_started_G1[2][ind2] - temp_loc)
-                                    if np.amin(d1)<20 and np.amin(d1) in temp_inds[0]:
-                                        # if we can assign the point to a cell that has newly started G1
-                                        assigned_inds[0].append(temp_started_G1[0][ind1])
-                                        assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
-                                        c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
-                                                           daughter_ind=temp_started_G1[0][np.argmin(d1)],
-                                                           temp_frame_num=frame_num)
-                                        num_divisions += 1
+                                    if not(temp_loc is None):
+                                        d1 = np.ones(len(temp_started_G1[0]))
+                                        for ind2 in range(len(temp_started_G1[0])):
+                                                d1[ind2] = np.linalg.norm(
+                                                    temp_started_G1[2][ind2] - temp_loc)
+                                        if np.amin(d1)<20 and np.amin(d1) in temp_inds[0]:
+                                            # if we can assign the point to a cell that has newly started G1
+                                            assigned_inds[0].append(temp_started_G1[0][ind1])
+                                            assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
+                                            c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
+                                                               daughter_ind=temp_started_G1[0][np.argmin(d1)],
+                                                               temp_frame_num=frame_num)
+                                            num_divisions += 1
                                     else:
                                         print 'Unable to assign a daughter in scene {0}, frame{1}, cell{2}'.format(
                                             scene, frame_num, temp_started_G1[0][ind1])
@@ -1411,20 +1420,21 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                                                                    directory, temp_started_G1[0][ind1], scene)
                                 # Calculating the distance from this point to each cell that started G1 this
                                 # cell cycle
-                                d1 = np.ones(len(temp_started_G1[0]))
-                                for ind2 in range(len(temp_started_G1[0])):
-                                    d1[ind2] = np.linalg.norm(
-                                        temp_started_G1[2][ind2] - temp_loc)
-                                if np.amin(d1) < 20:
-                                    # if we can assign the point to a cell that has newly started G1
-                                    assigned_inds[0].append(temp_started_G1[0][ind1])
-                                    assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
-                                    c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
-                                                       daughter_ind=temp_started_G1[0][np.argmin(d1)],
-                                                       temp_frame_num=frame_num)
-                                    num_divisions += 1
+                                if not (temp_loc is None):
+                                    d1 = np.ones(len(temp_started_G1[0]))
+                                    for ind2 in range(len(temp_started_G1[0])):
+                                        d1[ind2] = np.linalg.norm(
+                                            temp_started_G1[2][ind2] - temp_loc)
+                                    if np.amin(d1) < 20:
+                                        # if we can assign the point to a cell that has newly started G1
+                                        assigned_inds[0].append(temp_started_G1[0][ind1])
+                                        assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
+                                        c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
+                                                           daughter_ind=temp_started_G1[0][np.argmin(d1)],
+                                                           temp_frame_num=frame_num)
+                                        num_divisions += 1
                                 else:
-                                    print 'Unable to assign a daughter in scene {0}, frame{1}, cell{2}'.format(
+                                    print 'Unable to assign a daughter in scene {0}, frame {1}, cell {2}'.format(
                                         scene, frame_num, temp_started_G1[0][ind1])
                             else:  # we add a new pair
                                 temp_inds1 = [temp_started_G1[0][ind1], temp_started_G1[0][temp_ind2[0]]]
