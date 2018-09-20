@@ -247,8 +247,8 @@ for ind in range(2):
             # print temp1
             yv.append(temp1)
     # if len(filt_cc) > 0:
-    temp = scipy.stats.pearsonr(np.asarray(xv)*scale**3, yv)
-    plt.plot(np.asarray(xv)*scale**3, yv, marker='.', label=pops[ind]+' PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 3), np.round(temp[1], 3), len(filt_cc)), linestyle='None')
+        temp = scipy.stats.pearsonr(np.asarray(xv)*scale**3, yv)
+        plt.plot(np.asarray(xv)*scale**3, yv, marker='.', label=pops[ind]+' PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 3), np.round(temp[1], 3), len(filt_cc)), linestyle='None')
 plt.xlabel('$V_b$ ($\mu m^3$)')
 plt.ylabel('Absolute growth rate ($(V_d-V_b)/(t_{G1}V_b)$)')
 plt.legend()

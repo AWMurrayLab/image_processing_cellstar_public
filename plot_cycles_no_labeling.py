@@ -24,10 +24,17 @@ drange = 65535.0
 color = cm.tab10(np.linspace(0, 1, 10))
 print color[0]
 
-# yFB29 experiment on 180823
+# # yFB29 experiment on 180823
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180823_yFB29_800uMGal_timelapse/timelapse'
+# timestep=10.0
+
+
+# yFB29 experiment on 180831
 scale = pixel_size['60X']
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180823_yFB29_800uMGal_timelapse/timelapse'
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
 timestep=10.0
+
 
 
 directory = base_path + expt_path + '/plots'

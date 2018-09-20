@@ -73,6 +73,7 @@ image_filename, bf_filename, fl_filename = '/180831_yFB29_800uMGal_60X_', \
                                            'w1Brightfield confocal_', \
                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
 label_path = None  # if label_path is None then this experiment doesn't use labeling
+manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
 num_scenes = 5  # num_scenes should be the number of scenes to analyze + 1
 num_frames = np.asarray([56, 56, 56, 56])
 # num_frames should be the number of frames + 1. Default is the same for
@@ -193,7 +194,7 @@ temp_df.to_csv(base_path+expt_path+'/progress_report', sep='\t')
 if temp_df.loc[temp_df[temp_df.script == 'assign_lineages'].index[0], 'run'] == 0:
     # if this has not already been run
     C.assign_lineages(base_path, expt_path,image_filename, fl_filename, num_frames, analyzed_scene,
-                              num_scenes, threshold, drange)
+                              num_scenes, threshold, drange, manual_annotation)
     temp_df.loc[temp_df[temp_df.script == 'assign_lineages'].index[0], 'run'] = 1
     # update the progress report
     print 'Lineage data analyzed'

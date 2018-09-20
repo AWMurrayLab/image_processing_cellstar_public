@@ -24,7 +24,7 @@ class Cell(object):
     def __init__(self, birth_parameters):  # birth parameters = [tb, celltype, parent, vb, parent_current]
         self.exists = True
         # these are present for all cells
-        self.index = birth_parameters['index']
+        self.index = birth_parameters['index']  # note this starts from 1 as is defined by cellstar
         self.frames = [birth_parameters['current_frame']]
         self.position = [birth_parameters['centroid']]  # X then Y
         self.index_image = [birth_parameters['index_image']]
@@ -68,8 +68,9 @@ class CellCycle(object):
     cellCount = 0  # total number of cell cycles tracked
 
     def __init__(self, temp_cell, temp_parameters):  # generating a placeholder cell which will be fully updated later.
-        self.index = temp_parameters['index']  # this will be the unique index of this cell cycle
-        self.cell_index = temp_parameters['cell_index']  # this is the index of the cell this came from
+        self.index = CellCycle.cellCount  # this will be the unique index of this cell cycle
+        # self.index = temp_parameters['index']  # this will be the unique index of this cell cycle
+        self.cell_index = temp_parameters['cell_index']  # this is the unique identifier of the cell this came from
         self.cc_num = temp_parameters['cc_num']  # this is the number of the cell cycle in the cell this came from
         self.complete = temp_parameters['complete']  # whether this corresponds to a full cell cycle or not
         self.frames = [temp_cell.frames[temp_ind] for temp_ind in temp_parameters['range']]
@@ -95,8 +96,8 @@ class CellCycle(object):
         self.next_gen = None  # gives the index of the next generation of this cell cycle if it exists
         self.prev_gen = None  # gives the index of the previous generation of this cell cycle if it exists
         self.bud = None  # gives the index of the bud for this cell if it exists
-        self.parent = None  # gives the index of the cell cycle for the "parent" cell in which it produced the current
-        # cell (if there is one)
+        self.parent = None  # gives the unique index of the cell cycle for the "parent" cell in which it produced the
+        # current cell (if there is one)
         self.family = None
         CellCycle.cellCount += 1
 
@@ -576,6 +577,8 @@ def compare_distances(temp_cells, temp_inds, temp_coord, temp_timepoints):
 
 def assign_md_pair(temp_cells, mother_ind, daughter_ind, temp_frame_num):
     # first just check that this division event hasn't already been tracked
+    # Note that the input indices here should not be the unique cell identifiers,
+    # but rather the index in temp_cells.
     if not(temp_frame_num in temp_cells[mother_ind].daughter_assignment_frames):
         temp_cells[mother_ind].daughters.append(temp_cells[daughter_ind].index)
         temp_cells[daughter_ind].parent = temp_cells[mother_ind].index
@@ -589,6 +592,7 @@ def assign_md_pair(temp_cells, mother_ind, daughter_ind, temp_frame_num):
 
 def create_cycles(temp_cells, temp_ind, temp_cycles, ind, temp_data_origin):
     # take a cell and generate cycles for each of its individual cycles, which will be appended to temp_cycles
+    temp_cells_indexes = [obj.index for obj in temp_cells]
     temp_cells[temp_ind].temp_cycle_inds = []
     temp_obj = temp_cells[temp_ind]
 
@@ -612,7 +616,7 @@ def create_cycles(temp_cells, temp_ind, temp_cycles, ind, temp_data_origin):
         # gives the indices of the appropriate time points for this cell cycle (relative to the starting tracking time
         # of the cell in question)
         temp_params = {'range': range_timepoints, 'complete': None, 'parent': None, 'error': False,
-                       'start': None, 'index': ind, 'cc_num': temp_gen, 'cell_index': temp_ind,
+                       'start': None, 'cc_num': temp_gen, 'cell_index': temp_cells_indexes[temp_ind],
                        'data_origin': temp_data_origin}
         temp_cells[temp_ind].temp_cycle_inds.append(ind)  # keeping track of where this cycle is in the initial cell
         # list
@@ -641,17 +645,18 @@ def stitch_cycles(temp_cells, temp_cycles, temp_ind):
     # cell. Updates their mothers as well, so that run over the whole population, this should give the full number of
     # annotations.
     temp_obj = temp_cells[temp_ind]
-    temp_inds = temp_obj.temp_cycle_inds
+    temp_inds = temp_obj.temp_cycle_inds  # list of locations of cell cycles in temp_cycles associated with cell.
+    # NOT unique identifier
     temp_c_inds = [obj.index for obj in temp_cells]
     temp_cc_inds = [obj.index for obj in temp_cycles]
-    tv1 = [obj.index for obj in temp_cycles]
-    tv2 = [temp_cycles[tv1.index(i0)] for i0 in temp_obj.temp_cycle_inds]  # gives a list with the linked cycles from a
+    # tv1 = [obj.index for obj in temp_cycles]
+    # tv2 = [temp_cycles[tv1.index(i0)] for i0 in temp_obj.temp_cycle_inds]  # gives a list with the linked cycles from a
     # given cell. Must be length at least 1.
     for i0 in range(len(temp_inds)-1):
-        # assigning next generation
-        temp_cycles[temp_inds[i0]].next_gen = temp_inds[i0+1]
-        # assigning parent generation
-        temp_cycles[temp_inds[i0+1]].prev_gen = temp_inds[i0]
+        # assigning next generation. Unique cc identifier.
+        temp_cycles[temp_inds[i0]].next_gen = temp_cc_inds[temp_inds[i0+1]]
+        # assigning parent generation. Unique cc identifier.
+        temp_cycles[temp_inds[i0+1]].prev_gen = temp_cc_inds[temp_inds[i0]]
 
     if not(temp_obj.parent is None):  # in this case, the cell in question tracked had its birth tracked
         temp_cycles[temp_inds[0]].celltype = 2  # bud
@@ -664,9 +669,11 @@ def stitch_cycles(temp_cells, temp_cycles, temp_ind):
         temp_parent = temp_cells[temp_c_inds.index(temp_obj.parent)]  # gives the parent cell
         # print len(temp_parent.temp_cycle_inds), temp_parent.daughters.index(temp_obj.index)
         # print temp_parent.temp_cycle_inds, temp_parent.daughters
-        if temp_cycles[temp_inds[0]].frames[-1] in temp_parent.daughter_assignment_frames:  # only assign daughters
+        if (temp_cycles[temp_inds[0]].frames[-1] in temp_parent.daughter_assignment_frames)\
+                and (temp_parent.daughters[temp_parent.daughter_assignment_frames.index(temp_cycles[temp_inds[0]].frames[-1])] == temp_obj.index):
+            # only assign daughters if we know its parent is recording the correct division event.
             # print temp_cycles[temp_inds[0]].frames[-1], temp_parent.daughter_assignment_frames
-            # if this is correct
+
             temp_index = temp_parent.daughter_assignment_frames.index(temp_cycles[temp_inds[0]].frames[-1])
             # gives the index at which the parent cell gave birth to this daughter
             if not temp_parent.daughters[temp_index] == temp_obj.index:
@@ -683,16 +690,18 @@ def stitch_cycles(temp_cells, temp_cycles, temp_ind):
                                         temp_parent.frames.index(temp_cycles[temp_inds[0]].frames[-1]))
             # gives the index of the cell cycle for the parent cell with which this birth is associated.
             temp_parent_cc_index = temp_parent.temp_cycle_inds[temp_index1]  # gives the
-            # index of the cell cycle for the parent cellst
+            # index of the cell cycle for the parent within the list of cell cycles
             # temp_parent_cc_index = temp_parent.temp_cycle_inds[temp_parent.daughters.index(temp_obj.index)]  # gives the
             # index of the cell cycle for the parent cell
 
-            temp_cycles[temp_inds[0]].parent = temp_parent_cc_index
-            temp_cycles[temp_parent_cc_index].bud = temp_inds[0]  # defining the bud for the parent cell
+            temp_cycles[temp_inds[0]].parent = temp_cc_inds[temp_parent_cc_index]
+            temp_cycles[temp_parent_cc_index].bud = temp_cc_inds[temp_inds[0]]
+            # defining the bud for the parent cell cycle
             if len(temp_inds) > 1:
-                temp_cycles[temp_parent_cc_index].daughter = temp_inds[1]  # defining the daughter for the parent cell
-                temp_cycles[temp_inds[1]].mother = temp_parent_cc_index  # assigning a handle for the mother cell of the
-                # daughter
+                temp_cycles[temp_parent_cc_index].daughter = temp_cc_inds[temp_inds[1]]
+                # defining the daughter for the parent cell
+                temp_cycles[temp_inds[1]].mother = temp_cc_inds[temp_parent_cc_index]
+                # assigning a handle for the mother cell of the daughter
     elif len(temp_inds) > 1:  # in this case, we never assigned a parent for the current cell, so latter generations are
         # mothers and the first one is "unknown"
         for i1 in range(1, len(temp_inds)):
@@ -729,15 +738,16 @@ def integrate_bud_data(temp_cycles):
             for ind in temp_cycles[bud_ind].frames:
                 if ind in obj.frames:
                     temp_ind = obj.frames.index(ind)
-                    obj.vbud[temp_ind] = temp_cycles[obj.bud].ellipse_volume[ind-temp_cycles[obj.bud].frames[0]]
-                    obj.int_fl_bud[temp_ind] = temp_cycles[obj.bud].int_fl[ind-temp_cycles[obj.bud].frames[0]]
-                    obj.zproj_fl_bud[temp_ind] = temp_cycles[obj.bud].zproj_fl[ind - temp_cycles[obj.bud].frames[0]]
-                    obj.ellipse_fit_bud[temp_ind] = temp_cycles[obj.bud].ellipse_fit[ind - temp_cycles[obj.bud].frames[0]]
-                    obj.bud_seg[temp_ind] = temp_cycles[obj.bud].segment_coords[ind-temp_cycles[obj.bud].frames[0]]
+                    temp_bud_ind = indices.index(obj.bud)
+                    obj.vbud[temp_ind] = temp_cycles[temp_bud_ind].ellipse_volume[ind-temp_cycles[temp_bud_ind].frames[0]]
+                    obj.int_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].int_fl[ind-temp_cycles[temp_bud_ind].frames[0]]
+                    obj.zproj_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].zproj_fl[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.ellipse_fit_bud[temp_ind] = temp_cycles[temp_bud_ind].ellipse_fit[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.bud_seg[temp_ind] = temp_cycles[temp_bud_ind].segment_coords[ind-temp_cycles[temp_bud_ind].frames[0]]
                 else:
                     # print ind, obj.frames
                     obj.error = True
-                    temp_cycles[obj.bud].error = True
+                    temp_cycles[temp_bud_ind].error = True
 
     return temp_cycles
 
@@ -745,7 +755,7 @@ def integrate_bud_data(temp_cycles):
 def generate_tree(temp_cycles, temp_ind):
     # returns a list with the unique indices of all connected cells for a cell with a given unique index
     temp_inds = [obj.index for obj in temp_cycles]
-    temp_tree = [temp_inds.index(temp_ind)]
+    temp_tree = [temp_inds[temp_ind]]
     for ind in temp_tree:
         temp_obj = temp_cycles[temp_inds.index(ind)]
         # get all the indices of directly related cells.
@@ -1321,18 +1331,32 @@ def test_tree(temp_conn_mat, temp_assigned, temp_ind):
         if not(temp_assigned[temp_ind1]):  # if the prospective pair cell has not been assigned yet
             if np.sum(temp_conn_mat[temp_ind1, :])==1:
                 temp_type = 1  # if this is a regular tree with two pairs that are unassigned.
+            elif np.sum(temp_assigned[np.nonzero(temp_conn_mat[temp_ind1, :])]==0) == 1:  # if there is still only one
+                # unassigned pair for the pair then we treat this as normal.
+                temp_type = 1
             else:
-                temp_type = 2  # if the other cell has more than one pair, then this needs to be manually assigned
+                temp_type = 2  # if the other cell has more than one pair, and more than one is unassigned, then this
+                # needs to be manually assigned
         else:  # if the prospective pair has already been assigned to another cell
             temp_type = 0
-    elif temp_sum>1:
-        temp_type = 2  # if there is more than one prospective pair then this requires manual assignment
+    elif temp_sum > 1:
+        if np.sum(temp_assigned[np.nonzero(temp_conn_mat[temp_ind, :])]==0) == 1:  # if there are multiple potential
+            # pairs but only one is unassigned
+            temp_type = -1  # in this case we need to select the pair as unassigned one.
+        elif np.sum(temp_assigned[np.nonzero(temp_conn_mat[temp_ind, :])]==0) > 1:
+            temp_type = 2  # if there is more than one prospective pair and more than one unassigned then this requires
+            # manual assignment
+        else:
+            temp_type = 0  # if there are no unassigned pairs then this should be flagged for appending to
+            # pending_assignment
     return temp_type
 
 
 def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename, temp_num_frames,
-                              temp_analyzed_scene, temp_num_scenes, temp_threshold, temp_drange):
+                              temp_analyzed_scene, temp_num_scenes, temp_threshold, temp_drange,
+                    temp_manual_annotation):
     # This function takes as inputs the current cells with specified Whi5 localization, and assigns lineages
+    # temp_manual_annotation is a boolean value for whether this will involve you manually annotating these datasets.
     distance_cutoff = 40  # cutoff for centroid distance above which mother-daughter pairings cannot be assigned
     num_divisions = 0
     num_nuclear_events = 0
@@ -1341,6 +1365,7 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
         directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
         with open(directory + '/cells_scene_{0}_v2.pkl'.format(scene), 'rb') as input:
             c = pickle.load(input)
+        # cell_indices = [obj.index for obj in c]
         for obj in c:
             obj.daughters = []
             obj.parent = None
@@ -1383,7 +1408,8 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                     elif c[ind1].nuclear_whi5[temp_ind - 1] == 0:
                         # if temp_ind-2==0 or c[ind1].nuclear_whi5[temp_ind-2] == 0:  # we require that either the cell only
                         # started being
-                        temp_started_G1[0].append(ind1)  # these are the cells we have to assign
+                        temp_started_G1[0].append(ind1)  # these are the cells we have to assign. Note this is the
+                        # index in c, NOT the unique cell identifier.
                         temp_started_G1[1].append(temp_ind)
                         temp_started_G1[2].append(c[ind1].position[temp_ind])
                         num_nuclear_events += 1
@@ -1396,7 +1422,7 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                 to_remove = [[], []]
                 assigned = np.zeros(len(temp_started_G1[0]))  # This will track whether a cell has already been assigned
                 # We use this to avoid multiple assignments
-                dist_mat = np.zeros([len(temp_started_G1[0]), temp_started_G1[0]]) # matrix of distances between cell
+                dist_mat = np.zeros([len(temp_started_G1[0]), len(temp_started_G1[0])]) # matrix of distances between cell
                 # i and j for dist_mat[i,j]
                 dist_mat += (distance_cutoff+1000.0)*np.identity(len(temp_started_G1[0]))  # prevent cells partnering
                 # themselves.
@@ -1417,13 +1443,13 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                             if not(inds1 is None):  # if there wasn't a problem in assigning mother vs daughter
                                 assigned_inds[0].append(inds1[0])
                                 assigned_inds[1].append(inds1[1])
-                                c = assign_md_pair(c, mother_ind=temp_inds1[0],
-                                                   daughter_ind=temp_inds1[1],
+                                c = assign_md_pair(c, mother_ind=inds1[0],
+                                                   daughter_ind=inds1[1],
                                                    temp_frame_num=frame_num)
                                 assigned[ind1] = 1
                                 assigned[temp_ind1] = 1
                                 num_divisions += 1
-                        elif is_pair == 2:
+                        elif is_pair == 2 and temp_manual_annotation:
                             # If the pairing is ambiguous and this cell has not already been assigned then we have to
                             # manually assign this.
                             temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
@@ -1435,8 +1461,9 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                                 for ind2 in range(len(temp_started_G1[0])):
                                     d1[ind2] = np.linalg.norm(
                                         temp_started_G1[2][ind2] - temp_loc)
-                                if np.amin(d1) < 20:
-                                    # if we can assign the point to a cell that has newly started G1
+                                if np.amin(d1) < 20 and conn_mat[ind1, np.argmin(d1)]:
+                                    # if we can assign the point to a cell that has newly started G1 and this selected
+                                    # cell is sufficiently close to our cell in question
                                     inds1 = determine_mothers(c, frame_num,
                                                               [temp_started_G1[0][ind1], temp_started_G1[0][np.argmin(d1)]])
                                     if not inds1 is None: # if there was no problem with assignment mother vs. daughter
@@ -1451,19 +1478,37 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                                         num_divisions += 1
                             else:  # if we can't find a pair in the newly G1 population we simply add the current
                                 # cell to pending_assignment
-                                print 'Unable to assign a pair in scene {0}, frame{1}, cell{2}'.format(
+                                print 'Unable to assign a pair in scene {0}, frame {1}, cell {2}'.format(
                                     scene, frame_num, temp_started_G1[0][ind1])
                                 pending_assignment[-1].append(
                                     temp_started_G1[0][ind1])  # if we can't assign this well, we compare it to
                                 # the previous timepoint and the following one.
+                        elif is_pair == -1:  # in this case, the cell has multiple potential partners, but only one is
+                            # unassigned. We therefore can assign the cell the unassigned potential partner.
+                            temp_num = np.nonzero(assigned[np.nonzero(conn_mat[ind1,:])]==0)  # the index in nonzero ent
+                            # of conn_mat in which the cell has not been assigned yet
+                            ind2 = np.nonzero(conn_mat[ind1,:])[0][temp_num][0]  # gives the index in "assigned" of the
+                            # pair
+                            inds1 = determine_mothers(c, frame_num,
+                                                      [temp_started_G1[0][ind1], temp_started_G1[0][ind2]])
+                            if not inds1 is None:  # if there was no problem with assignment mother vs. daughter
+                                assigned_inds[0].append(inds1[0])
+                                assigned_inds[1].append(inds1[1])
+                                c = assign_md_pair(c, mother_ind=inds1[0],
+                                                   daughter_ind=inds1[1],
+                                                   temp_frame_num=frame_num)
+                                # tracking that these cells have been assigned
+                                assigned[ind1] = 1
+                                assigned[ind2] = 1
+                                num_divisions += 1
                         elif is_pair == 0:
                             pending_assignment[-1].append(temp_started_G1[0][ind1])  # if we can't assign this well, we compare it to
                                     # the previous timepoint and the following one
-                            print 'Unable to assign a pair in scene {0}, frame{1}, cell{2}'.format(
+                            print 'Unable to assign a pair in scene {0}, frame {1}, cell {2}'.format(
                                 scene, frame_num, temp_started_G1[0][ind1])
                 # we take any cell that is pending assignment in the current frame, and compare to the previous frame to
                 # see if there is an appropriate assignment there.
-                dist_mat = (distance_cutoff+1000.0)*np.ones([len(pending_assignment[-1], len(pending_assignment[-2]))])
+                dist_mat = (distance_cutoff+1000.0)*np.ones([len(pending_assignment[-1]), len(pending_assignment[-2])])
                 # note that here we should never have the same cell appear in subsequent timesteps since we only append
                 # cells to this vector that are tracked as having had Whi5 not in the nucleus in the nucleus in the prev
                 # timestep. I.e. if it is in pending_assignment[-2] it cannot be in pending_assignment[-1].
@@ -1486,7 +1531,7 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                             if np.sum(conn_mat[:, i1])==1 and not(assigned[1][i1]):  # if the potential pair has only
                                 # one potential pair and is not already assigned (similar to is_pair==1 above).
                                 inds1 = determine_mothers(c, frame_num,
-                                                          [pending_assignment[-1][i0], pending_assignment[-1][i1]])
+                                                          [pending_assignment[-1][i0], pending_assignment[-2][i1]])
                                 if not inds1 is None:  # if there was no problem with assignment mother vs. daughter
                                     assigned_inds[0].append(inds1[0])
                                     assigned_inds[1].append(inds1[1])
@@ -1501,101 +1546,12 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                                     num_divisions += 2
                                     to_remove[0].append(pending_assignment[-1][i0])
                                     to_remove[1].append(pending_assignment[-2][i1])
+                                    print 'Assigned M {0}, D {1} in frame {2}'.format(inds1[0], inds1[1], frame_num)
                                     # removing the newly tracked items from pending_assignment. Cells from the previous
                                     # timestep will still appear as not being tracked in the previous frame.
-            # removing the assigned cells from the pending_assignment list
-            pending_assignment[-1] = list(set(pending_assignment[-1]) - set(to_remove[0]))
-            pending_assignment[-2] = list(set(pending_assignment[-2]) - set(to_remove[1]))
-                    # OLD CODE
-                    # if temp_mothers[ind1]:  # if this cell is a mother then look within the cells which haven't
-                    #     # previously been classified as mothers.
-                    #
-                    #     temp_inds = np.nonzero(temp_mothers == 0)
-                    #     temp_ind2 = np.argsort(
-                    #         dist_mat[ind1, temp_inds])  # ordering the indices of temp_inds based on their distance
-                    #     # print len(temp_inds), temp_ind2, temp_inds[0]
-                    #     if len(temp_inds[0]) > 0:
-                    #         if d[temp_inds[0][temp_ind2[0]]] < distance_cutoff:  # if the lowest distance is less than
-                    #             # the distance cutoff
-                    #             if sum(d[temp_inds] < distance_cutoff) > 1:  # if there is another cell with low distance in
-                    #                 # the same frame then we neglect this for now. This should ideally be developed later
-                    #                 # with manual correction
-                    #                 # pending_assignment[-1].append(temp_started_G1[0][ind1])
-                    #                 # dir1 = temp_base_path + temp_expt_path
-                    #
-                    #                 # Calculating the distance from this point to each cell that started G1 this
-                    #                 # cell cycle
-                    #                 if not(temp_loc is None):
-                    #                     d1 = np.ones(len(temp_started_G1[0]))
-                    #                     for ind2 in range(len(temp_started_G1[0])):
-                    #                             d1[ind2] = np.linalg.norm(
-                    #                                 temp_started_G1[2][ind2] - temp_loc)
-                    #                     if np.amin(d1)<20 and np.amin(d1) in temp_inds[0]:
-                    #                         # if we can assign the point to a cell that has newly started G1
-                    #                         assigned_inds[0].append(temp_started_G1[0][ind1])
-                    #                         assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
-                    #                         c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
-                    #                                            daughter_ind=temp_started_G1[0][np.argmin(d1)],
-                    #                                            temp_frame_num=frame_num)
-                    #                         num_divisions += 1
-                    #                     else:
-                    #                         print 'Unable to assign a daughter in scene {0}, frame{1}, cell{2}'.format(
-                    #                             scene, frame_num, temp_started_G1[0][ind1])
-                    #             else:
-                    #                 assigned_inds[0].append(temp_started_G1[0][ind1])
-                    #                 assigned_inds[1].append(temp_started_G1[0][temp_inds[0][temp_ind2[0]]])
-                    #                 c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
-                    #                                      daughter_ind=temp_started_G1[0][temp_inds[0][temp_ind2[0]]],
-                    #                                      temp_frame_num=frame_num)
-                    #                 num_divisions += 1
-                    #     else:
-                    #         pending_assignment[-1].append(temp_started_G1[0][ind1])  # if we can't assign this well,
-                    #         # then we will revisit it in the next timeframe
-                    # else:
-                    #     temp_ind2 = np.argsort(d)
-                    #     if d[temp_ind2[0]] < distance_cutoff:
-                    #         if sum(d < distance_cutoff) > 1:  # As above for the case of cells which we know to be
-                    #             # mothers, if there is another cell with low distance in
-                    #             # the same frame then we neglect this for now. This should ideally be developed later
-                    #             # with manual correction
-                    #             # pending_assignment[-1].append(temp_started_G1[0][ind1])
-                    #             temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
-                    #                                                directory, temp_started_G1[0][ind1], scene)
-                    #             # Calculating the distance from this point to each cell that started G1 this
-                    #             # cell cycle
-                    #             if not (temp_loc is None):
-                    #                 d1 = np.ones(len(temp_started_G1[0]))
-                    #                 for ind2 in range(len(temp_started_G1[0])):
-                    #                     d1[ind2] = np.linalg.norm(
-                    #                         temp_started_G1[2][ind2] - temp_loc)
-                    #                 if np.amin(d1) < 20:
-                    #                     # if we can assign the point to a cell that has newly started G1
-                    #                     assigned_inds[0].append(temp_started_G1[0][ind1])
-                    #                     assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
-                    #                     c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
-                    #                                        daughter_ind=temp_started_G1[0][np.argmin(d1)],
-                    #                                        temp_frame_num=frame_num)
-                    #                     num_divisions += 1
-                    #             else:
-                    #                 print 'Unable to assign a daughter in scene {0}, frame {1}, cell {2}'.format(
-                    #                     scene, frame_num, temp_started_G1[0][ind1])
-                    #         else:  # we add a new pair
-                    #             temp_inds1 = [temp_started_G1[0][ind1], temp_started_G1[0][temp_ind2[0]]]
-                    #             # print temp_inds1
-                    #             temp_val = [c[temp_inds1[0]].ellipse_volume[frame_num - c[temp_inds1[0]].frames[0]],
-                    #                         c[temp_inds1[1]].ellipse_volume[frame_num - c[temp_inds1[1]].frames[0]]]
-                    #             # print temp_val
-                    #             m_ind = np.argmax(temp_val)
-                    #             # find which is the mother cell based on which has the larger cell size.
-                    #             assigned_inds[0].append(temp_inds1[m_ind])
-                    #             assigned_inds[1].append(temp_inds1[m_ind - 1])
-                    #             c = assign_md_pair(c, mother_ind=temp_inds1[m_ind],
-                    #                                  daughter_ind=temp_inds1[m_ind - 1],
-                    #                                  temp_frame_num=frame_num)
-                    #             num_divisions += 1
-                    #     else:
-                    #         pending_assignment[-1].append(temp_started_G1[0][ind1])  # if we can't assign this well,
-                    #         # then we will plan to revisit it in the next timeframe
+                # removing the assigned cells from the pending_assignment list
+                pending_assignment[-1] = list(set(pending_assignment[-1]) - set(to_remove[0]))
+                pending_assignment[-2] = list(set(pending_assignment[-2]) - set(to_remove[1]))
 
             ######################## Producing a figure to track the results so far
             # producing a figure to track the result of this so far.
@@ -1645,7 +1601,7 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
 def create_cycles_full(temp_base_path, temp_expt_path, temp_num_scenes):
     # This function takes the output from assign_lineages and creates individual cell cycles from that
     cc = []
-    ind = 0  # this indexes the cell we are considering in the current timestep
+    ind = 0  # this indexes the cell cycles we are generating.
     # this will be repeated with each new iteration
 
     for scene in range(1, temp_num_scenes):
@@ -1655,12 +1611,13 @@ def create_cycles_full(temp_base_path, temp_expt_path, temp_num_scenes):
         with open(directory + '/cells_scene_{0}_v3.pkl'.format(scene), 'rb') as input:
             c = pickle.load(input)
         for i0 in range(len(c)):
-            if not(i0 == c[i0].index):
-                raise ValueError('Cell indexing distinct from cell list indexing')
-            else:
-                c, cc, ind = create_cycles(c, i0, cc, ind,
-                                             temp_data_origin=data_index)  # note that the unique index for each
-            # cell cycle is unique across scenes also, but that the
+            # if not(i0 == c[i0].index-1):
+            #     print 'Cell indexing error in list number {0}, index number {1}'.format(i0, c[i0].index)
+            #     raise ValueError('Cell indexing distinct from cell list indexing')
+            # else:
+            c, cc, ind = create_cycles(c, i0, cc, ind,
+                                         temp_data_origin=data_index)  # note that the unique index for each
+            # cell cycle is unique across scenes also
         for i0 in range(len(c)):
             c, cc = stitch_cycles(c, cc, i0)
         print len(cc)
