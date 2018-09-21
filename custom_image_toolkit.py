@@ -36,6 +36,7 @@ class Cell(object):
         self.fluor_vals = [0]  # list of fluorescence values at each timepoint.
         self.segment_coords = [birth_parameters['segment_coords']]
         self.zproj_fluor_vals = [0]
+        self.zproj_fluor_vals_c2 = [0]
         # if
         # self.
         # self.celltype = birth_parameters[1]  # 0 is mother, 1 is daughter
@@ -54,6 +55,7 @@ class Cell(object):
         self.nuclear_whi5.append(0)
         self.fluor_vals.append(0)
         self.zproj_fluor_vals.append(0)
+        self.zproj_fluor_vals_c2.append(0)
         self.segment_coords.append(frame_parameters['segment_coords'])
 
     def add_fluor_placeholders(self):
@@ -81,6 +83,7 @@ class CellCycle(object):
         self.label_type = temp_cell.type
         self.nuclear_whi5 = [temp_cell.nuclear_whi5[temp_ind] for temp_ind in temp_parameters['range']]
         self.zproj_fl = [temp_cell.zproj_fluor_vals[temp_ind] for temp_ind in temp_parameters['range']]
+        self.zproj_fl_c2 = [temp_cell.zproj_fluor_vals_c2[temp_ind] for temp_ind in temp_parameters['range']]
         self.segment_coords = [temp_cell.segment_coords[temp_ind] for temp_ind in temp_parameters['range']]
         if temp_parameters['complete']:  # if this is a full cell cycle.
             self.tb = self.frames[0]
@@ -882,8 +885,9 @@ def populate_cells_all_scenes_1(temp_base_path, temp_expt_path, temp_image_filen
 
 
 def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename,
-                                temp_num_scenes, temp_num_frames, temp_bkgd_scene):
+                                temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_fl_filename_c2=None):
     # this takes the cell output from script populate_cells_1.py and adds fluorescence data to it
+    # temp_fl_filename_c2 is the filename of the secondary fluorescence channel (primary corresponds to Whi5).
     pixel_size = {'60X': 0.267, '100X': 0.16}
     z_scale, z_offset = 0.4 / pixel_size['60X'], 0
 
