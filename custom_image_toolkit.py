@@ -360,6 +360,23 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
     return temp_cells, temp_mask
 
 
+def add_fluorescence_traces_c2(temp_path, temp_cells, frame_list, current_frame, bkgd):
+    # This function adds the z-projected fluorescence above and below the 2d cell segmentation for a second fluorescence
+    # channel c2
+    temp_im = io.imread(temp_path)-bkgd  # subtracting the average background at each xy point. Structure is (z,y,x)
+
+    for temp_ind in frame_list:
+        i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+        if current_frame != temp_cells[temp_ind].frames[i0]:
+            print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
+            raise ValueError('Wrong frame selected')
+        # gives the index for the current frame in that cell's history
+        temp_coords = temp_cells[temp_ind].segment_coords[i0]
+        temp_cells[temp_ind].zproj_fluor_vals_c2[i0] = np.sum(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # calculating the full z projection
+    return temp_cells
+
+
 def find_min_distance(temp_array, temp_centroid):
     # returns the unique cell number with stored centroid closest to the calculated centroid
     # print temp_array.columns[3:]
@@ -729,6 +746,7 @@ def integrate_bud_data(temp_cycles):
             obj.vbud = []
             obj.ellipse_fit_bud = []
             obj.zproj_fl_bud = []
+            obj.zproj_fl_bud_c2 = []
             obj.bud_seg = []
             for temp_ind in range(len(obj.frames)):
                 obj.zproj_fl_bud.append(0)
@@ -736,6 +754,7 @@ def integrate_bud_data(temp_cycles):
                 obj.int_fl_bud.append(0)
                 obj.ellipse_fit_bud.append(0)
                 obj.bud_seg.append(None)
+                obj.zproj_fl_bud_c2.append(0)
             # print temp_cycles[obj.bud].frames, obj.frames
             bud_ind = indices.index(obj.bud)
             for ind in temp_cycles[bud_ind].frames:
@@ -747,6 +766,8 @@ def integrate_bud_data(temp_cycles):
                     obj.zproj_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].zproj_fl[ind - temp_cycles[temp_bud_ind].frames[0]]
                     obj.ellipse_fit_bud[temp_ind] = temp_cycles[temp_bud_ind].ellipse_fit[ind - temp_cycles[temp_bud_ind].frames[0]]
                     obj.bud_seg[temp_ind] = temp_cycles[temp_bud_ind].segment_coords[ind-temp_cycles[temp_bud_ind].frames[0]]
+                    obj.zproj_fl_bud_c2[temp_ind] = temp_cycles[temp_bud_ind].zproj_fl_c2[
+                        ind - temp_cycles[temp_bud_ind].frames[0]]
                 else:
                     # print ind, obj.frames
                     obj.error = True
@@ -924,6 +945,23 @@ def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filen
                                                    current_frame=frame_num, z_scaling=z_scale, z_offset=z_offset,
                                                    bkgd=bkgd_im1, save_coords=False)
             io.imsave(directory + '/images/mask3d_s{0}_t{1}.TIF'.format(str(scene), str(frame_num)), mask)
+            if not(temp_fl_filename_c2 is None):  # if we have a second fluorescence channel in this experiment
+                filename_fl = temp_image_filename + temp_fl_filename_c2 + 's{0}_t{1}.TIF'.format(str(scene),
+                                                                                              str(frame_num))
+                filename_fl_bkgd = temp_image_filename + temp_fl_filename_c2 + \
+                                   's{0}_t{1}.TIF'.format(str(temp_bkgd_scene), str(frame_num))
+                # format is z, y, x
+                bkgd_im = io.imread(temp_base_path + temp_expt_path + filename_fl_bkgd)
+                bkgd_im1 = np.zeros(bkgd_im.shape)
+                temp1 = np.mean(bkgd_im, axis=0)
+                # taking the mean with respect to the z axis. Do it this way since there doesn't seem
+                # to be any systematic bias in that direction.
+                for i0 in range(bkgd_im.shape[0]):
+                    bkgd_im1[i0, :, :] = temp1[:, :]
+                del temp1, bkgd_im
+                c = add_fluorescence_traces_c2(temp_path=temp_base_path + temp_expt_path + filename_fl,
+                                                     temp_cells=c,
+                                                     frame_list=update_list[-1], current_frame=frame_num, bkgd=bkgd_im1)
             print 'done scene {0}, frame {1}'.format(scene, frame_num)
         save_object(c, directory + '/cells_fl_scene_{0}.pkl'.format(scene))
 

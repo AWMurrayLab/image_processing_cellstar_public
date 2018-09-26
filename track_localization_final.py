@@ -56,19 +56,41 @@ import os
 # drange = 65535.0  # image fluorescence maximum
 
 
-# yFB29 experiment on 180831
+# # yFB29 experiment on 180831
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
+# image_filename, bf_filename, fl_filename = '/180831_yFB29_800uMGal_60X_', \
+#                                            'w1Brightfield confocal_', \
+#                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
+# label_path = None  # if label_path is None then this experiment doesn't use labeling
+# num_scenes = 5  # num_scenes should be the number of scenes to analyze + 1
+# num_frames = np.asarray([56, 56, 56, 56])
+# # num_frames should be the number of frames + 1. Default is the same for
+# # each field of view.
+# num_frames_analyzed = 40  # number of analyzed timepoints for Whi5 localization
+# bkgd_scene = 12  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+# analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
+# threshold = 10000  # threshold for visualizing log or linear fluorescence data
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [0, 0, 0, 0, 0, 0, 0, 0]
+
+
+# pACT1-mKate2 experiment on 180910
+
 pixel_size = {'60X': 0.267, '100X': 0.16}
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
-image_filename, bf_filename, fl_filename = '/180831_yFB29_800uMGal_60X_', \
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180910_pACT1_mKate2/timelapse'
+image_filename, bf_filename, fl_filename = '/180910_yFB11_12_mated_hap3_1_60X_5min_10lp_v1_', \
                                            'w1Brightfield confocal_', \
                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
+fl_filename_c2 = 'w3594 laser 10_'  # secondary fluorescence channel
 label_path = None  # if label_path is None then this experiment doesn't use labeling
-num_scenes = 5  # num_scenes should be the number of scenes to analyze + 1
-num_frames = np.asarray([56, 56, 56, 56])
+manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
+num_scenes = 8  # num_scenes should be the number of scenes to analyze + 1
+num_frames = np.asarray([55, 70, 65, 66, 51, 66, 66])
 # num_frames should be the number of frames + 1. Default is the same for
 # each field of view.
-num_frames_analyzed = 40  # number of analyzed timepoints for Whi5 localization
-bkgd_scene = 12  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
+bkgd_scene = 8  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
 analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
 threshold = 10000  # threshold for visualizing log or linear fluorescence data
 drange = 65535.0  # image fluorescence maximum
