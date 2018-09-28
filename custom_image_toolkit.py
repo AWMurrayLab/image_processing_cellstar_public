@@ -1699,7 +1699,7 @@ def study_cell(temp_cell):
 
 def validate_cycles(temp_base_path, temp_expt_path, temp_image_filename, temp_bf_filename, temp_num_frames,
                               temp_num_scenes):
-    with open(temp_base_path+temp_expt_path+ '/cell_cycles_compiled.pkl', 'rb') as input:
+    with open(temp_base_path+temp_expt_path+ '/cell_cycles_filtered.pkl', 'rb') as input:
         temp_cycles = pickle.load(input)
     filt_cc = [obj for obj in temp_cycles if obj.complete and not (obj.error) and not (obj.daughter is None)]
     for scene in range(1, temp_num_scenes):
@@ -1765,3 +1765,49 @@ def label_boundaries(temp_base_path, temp_expt_path, temp_image_filename, temp_b
                     obj.edge_cell = True  # record this for the cell
         cells += temp_cells
     save_object(cells, temp_base_path+temp_expt_path + '/cells_compiled.pkl')
+
+
+def filter_cycles(temp_base_path, temp_expt_path, temp_scale, temp_size_thresh=None):
+    # temp_height is 3.5um for haploid cell_asics plates, 5.0 for diploid
+    # temp_scale is the pixel size in the XY plane
+    # determining whether that cycle shows connection with the image boundary
+    bdys = set([0, 511])
+    with open(temp_base_path+temp_expt_path+ '/cell_cycles_compiled.pkl', 'rb') as input:
+        temp_cycles = pickle.load(input)
+    temp_cycles1 = []
+    temp_areas = np.array([obj.segment_coords[-1].shape[0] for obj in temp_cycles])
+    for obj in temp_cycles:
+        obj.edge_cycle = False
+        obj.pancake = False
+        for i1 in range(len(obj.segment_coords)):
+            temp_coords = obj.segment_coords[i1]
+            if not (
+                obj.daughter is None) and obj.complete:  # this cell cycle should have been captured for the full time
+                if not (obj.bud_seg[i1] is None):
+                    # print 'hi'
+                    # print temp_coords.shape, obj.bud_seg[i1]
+                    temp_coords = np.concatenate((temp_coords, obj.bud_seg[i1]), axis=0)  # if this cell has a bud we
+                    # append the segment coordinates of the bud to this area so that we flag that too.
+            for i0 in range(2):
+                if bdys.intersection(zip(*temp_coords)[i0]):
+                    obj.edge_cycle = True  # recording that this cell cycle was segmented with a connection to the image
+                    # boundary
+    # determining whether that cell is too big for it to fit without being squashed
+
+    if not (temp_size_thresh is None):
+        temp_thresh = np.mean(temp_areas)+1.5*np.std(temp_areas)  # 1.5 sd above mean area at division.
+        # temp_thresh = math.pi*(50.0*temp_height/(2*temp_scale))**2  # the area of a circle that is too big to fit
+        # properly in 3D (in units of pixels squared). Note this is difficult to calibrate.
+        for obj in temp_cycles:
+
+            for temp_coords in obj.segment_coords:
+                if temp_coords.shape[0]>temp_thresh:  # the length of temp_coords corresponds to the area in units of
+                    # pixels squared
+                    obj.pancake=True  # in this case we now know not to trust this cell cycle.
+    for obj in temp_cycles:
+        if not(obj.edge_cycle) and not(obj.pancake) and obj.complete and not(obj.error) and not(obj.daughter is None):
+            # if this is a high quality cell cycle
+            temp_cycles1.append(obj)
+    save_object(temp_cycles1, temp_base_path+temp_expt_path + '/cell_cycles_filtered.pkl')
+    print 'Number of high quality cell cycles: {0}'.format(len(temp_cycles1))
+    return temp_cycles1

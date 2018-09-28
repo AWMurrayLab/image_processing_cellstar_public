@@ -67,46 +67,51 @@ import os
 
 
 # yFB29 experiment on 180831
-pixel_size = {'60X': 0.267, '100X': 0.16}
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
-image_filename, bf_filename, fl_filename = '/180831_yFB29_800uMGal_60X_', \
-                                           'w1Brightfield confocal_', \
-                                           'w2515 laser 10_'  # note to change fluorescence path to match laser power
-fl_filename_c2 = None  # secondary fluorescence channel
-label_path = None  # if label_path is None then this experiment doesn't use labeling
-manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
-num_scenes = 7  # num_scenes should be the number of scenes to analyze + 1
-num_frames = np.asarray([56, 56, 56, 56, 56, 56])
-# num_frames should be the number of frames + 1. Default is the same for
-# each field of view.
-num_frames_analyzed = 40  # number of analyzed timepoints for Whi5 localization
-bkgd_scene = 12  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
-analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
-threshold = 10000  # threshold for visualizing log or linear fluorescence data
-drange = 65535.0  # image fluorescence maximum
-prog_vec = [0, 0, 0, 0, 0, 0, 0, 0]
-
-# # pACT1-mKate2 experiment on 180910
-#
 # pixel_size = {'60X': 0.267, '100X': 0.16}
-# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180910_pACT1_mKate2/timelapse'
-# image_filename, bf_filename, fl_filename = '/180910_yFB11_12_mated_hap3_1_60X_5min_10lp_v1_', \
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
+# image_filename, bf_filename, fl_filename = '/180831_yFB29_800uMGal_60X_', \
 #                                            'w1Brightfield confocal_', \
 #                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
-# fl_filename_c2 = 'w3594 laser 10_'  # secondary fluorescence channel
+# scale = pixel_size['60X']
+# height = 5.0  # minimum height of the cellasics chamber
+# fl_filename_c2 = None  # secondary fluorescence channel
 # label_path = None  # if label_path is None then this experiment doesn't use labeling
 # manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
-# num_scenes = 8  # num_scenes should be the number of scenes to analyze + 1
-# num_frames = np.asarray([55, 70, 65, 66, 51, 66, 66])
+# num_scenes = 7  # num_scenes should be the number of scenes to analyze + 1
+# num_frames = np.asarray([56, 56, 56, 56, 56, 56])
 # # num_frames should be the number of frames + 1. Default is the same for
 # # each field of view.
-# num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
-# bkgd_scene = 8  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+# num_frames_analyzed = 40  # number of analyzed timepoints for Whi5 localization
+# bkgd_scene = 12  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
 # analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
 # threshold = 10000  # threshold for visualizing log or linear fluorescence data
 # drange = 65535.0  # image fluorescence maximum
-# prog_vec = [0, 0, 0, 0, 0, 0, 0, 0]
+# size_thresh = True  # do we remove the largest cells?
+# prog_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 
+# pACT1-mKate2 experiment on 180910
+
+
+pixel_size = {'60X': 0.267, '100X': 0.16}
+scale = pixel_size['60X']
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180910_pACT1_mKate2/timelapse'
+image_filename, bf_filename, fl_filename = '/180910_yFB11_12_mated_hap3_1_60X_5min_10lp_v1_', \
+                                           'w1Brightfield confocal_', \
+                                           'w2515 laser 10_'  # note to change fluorescence path to match laser power
+fl_filename_c2 = 'w3594 laser 10_'  # secondary fluorescence channel
+label_path = None  # if label_path is None then this experiment doesn't use labeling
+manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
+num_scenes = 8  # num_scenes should be the number of scenes to analyze + 1
+num_frames = np.asarray([55, 70, 65, 66, 51, 66, 66])
+# num_frames should be the number of frames + 1. Default is the same for
+# each field of view.
+num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
+bkgd_scene = 8  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
+threshold = 10000  # threshold for visualizing log or linear fluorescence data
+drange = 65535.0  # image fluorescence maximum
+prog_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+size_thresh = False  # do we remove the largest cells?
 
 #  Analysis of experimental data.
 
@@ -119,7 +124,7 @@ else:
     d = {'run': prog_vec, 'script': ['populate_cells_all_scenes_1', 'populate_cells_all_scenes_2',
                                    'populate_cells_all_scenes_3', 'track_localization_manual_annotation',
                                          'analyze_whi5_distribution', 'assign_lineages', 'create_cycles',
-                                                     'validate_cycles']}
+                                                     'validate_cycles', 'filter_cycles']}
     temp_df = pd.DataFrame(data=d)
 
 # Step 1:
@@ -246,6 +251,23 @@ temp_df.to_csv(base_path+expt_path+'/progress_report', sep='\t')
 
 
 # Step 8:
+# filtering poor quality cell cycles
+if temp_df.loc[temp_df[temp_df.script == 'filter_cycles'].index[0], 'run'] == 0:
+    # if this has not already been run
+    C.filter_cycles(base_path, expt_path, temp_scale=scale, temp_size_thresh=size_thresh)
+    temp_df.loc[temp_df[temp_df.script == 'filter_cycles'].index[0], 'run'] = 1
+    # update the progress report
+    print 'Cycle data filtered'
+else:  # if this has already been run
+    print 'Using previously filtered cell cycle data'
+
+
+# Saving the progress report
+print 'Saving progress report'
+temp_df.to_csv(base_path+expt_path+'/progress_report', sep='\t')
+
+
+# Step 9:
 # Creating plots to validate cell cycle data
 if temp_df.loc[temp_df[temp_df.script == 'validate_cycles'].index[0], 'run'] == 0:
     # if this has not already been run

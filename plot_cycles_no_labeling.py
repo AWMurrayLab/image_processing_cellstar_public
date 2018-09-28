@@ -30,22 +30,23 @@ print color[0]
 # timestep=10.0
 
 
-# # yFB29 experiment on 180831
-# scale = pixel_size['60X']
-# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
-# timestep=10.0
-
-
-# pACT1-mKate2 experiment on 180910
+# yFB29 experiment on 180831
 scale = pixel_size['60X']
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180910_pACT1_mKate2/timelapse'
-timestep = 5.0
-fluor_c2 = True
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
+timestep=10.0
+fluor_c2=False
+
+
+# # pACT1-mKate2 experiment on 180910
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180910_pACT1_mKate2/timelapse'
+# timestep = 5.0
+# fluor_c2 = True
 
 directory = base_path + expt_path + '/plots'
 if not os.path.exists(directory):
     os.makedirs(directory)
-with open(base_path+expt_path+'/cell_cycles_compiled.pkl', 'rb') as input:
+with open(base_path+expt_path+'/cell_cycles_filtered.pkl', 'rb') as input:
     cc = pickle.load(input)
 # initial definitions
 celltypes = ['Mother', 'Daughter']
