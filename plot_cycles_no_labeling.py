@@ -29,12 +29,12 @@ print color[0]
 # base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180823_yFB29_800uMGal_timelapse/timelapse'
 # timestep=10.0
 
-
-# yFB29 experiment on 180831
-scale = pixel_size['60X']
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
-timestep=10.0
-fluor_c2=False
+#
+# # yFB29 experiment on 180831
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180831_yFB29_800uMGal/timelapse'
+# timestep=10.0
+# fluor_c2=False
 
 
 # # pACT1-mKate2 experiment on 180910
@@ -42,6 +42,26 @@ fluor_c2=False
 # base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180910_pACT1_mKate2/timelapse'
 # timestep = 5.0
 # fluor_c2 = True
+# zscale=0.7
+
+# # pACT1-mCherry experiment on 181114
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181114_yFB78_Raff_125Gal/timelapse'
+# timestep = 10.0
+# fluor_c2 = True
+# zscale = 0.7
+
+# yFB79 Raffinose experiment on 181207
+scale = pixel_size['60X']
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal/timelapse'
+timestep = 10.0
+fluor_c2 = True
+zscale = 0.7
+
+# Fluor linear slope vs vb from birth to start
+# Fluor pointwise slope from Start to division
+# Concentration vs volume at division
+# Thresholded volume growth rate
 
 directory = base_path + expt_path + '/plots'
 if not os.path.exists(directory):
@@ -54,9 +74,390 @@ celltypes = ['Mother', 'Daughter']
 
 
 if fluor_c2:
+
     fig = plt.figure(figsize=[5, 5])
     filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
                not (obj.daughter is None)]
+    if len(filt_cc) > 0:
+        xv = [len(obj.frames)-obj.start for obj in filt_cc]
+        xv1 = timestep * np.arange(np.amax(xv))
+        yv = np.full([len(xv), np.amax(xv)], np.nan)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = 1.0 / np.asarray(filt_cc[i0].pixel_thresh_vol[filt_cc[i0].start])
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' dilution factor. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+
+        yv = np.full([len(xv), np.amax(xv)], np.nan)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = (np.asarray(filt_cc[i0].zproj_fl_c2[filt_cc[i0].start:])+
+                               np.array(filt_cc[i0].zproj_fl_bud_c2[filt_cc[i0].start:])) / np.asarray(
+                filt_cc[i0].pixel_thresh_vol[filt_cc[i0].start:])
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' C2. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = (np.asarray(filt_cc[i0].zproj_fl[filt_cc[i0].start:])+
+                               np.array(filt_cc[i0].zproj_fl_bud[filt_cc[i0].start:])) / np.asarray(
+                filt_cc[i0].pixel_thresh_vol[filt_cc[i0].start:])
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' C1. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+
+    plt.ylabel('Relative dilution')
+    plt.xlabel('Time post cell birth')
+    plt.legend()
+    plt.title('Dilution factor due to growth in G1')
+    fig.savefig(directory + '/post_start_dilution_traces_thresh_post_birth_full_pop.png', bbox_inches='tight',
+                dpi=fig.dpi)
+    del fig
+
+    fig = plt.figure(figsize=[5, 5])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    if len(filt_cc) > 0:
+        xv = [len(obj.frames) for obj in filt_cc]
+        xv1 = timestep * np.arange(np.amax(xv))
+        yv = np.full([len(xv), np.amax(xv)], np.nan)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = 1.0 / np.asarray(filt_cc[i0].pixel_thresh_vol)
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' dilution factor. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+
+        yv = np.full([len(xv), np.amax(xv)], np.nan)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = (np.asarray(filt_cc[i0].zproj_fl_c2)+np.array(filt_cc[i0].zproj_fl_bud_c2)) / np.asarray(
+                filt_cc[i0].pixel_thresh_vol)
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' C2. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = (np.asarray(filt_cc[i0].zproj_fl)+np.array(filt_cc[i0].zproj_fl_bud)) / np.asarray(
+                filt_cc[i0].pixel_thresh_vol)
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' C1. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+
+    plt.ylabel('Relative dilution')
+    plt.xlabel('Time post cell birth')
+    plt.legend()
+    plt.title('Dilution factor due to growth in G1')
+    fig.savefig(directory + '/full_cell_cycle_dilution_traces_thresh_post_birth_full_pop.png', bbox_inches='tight',
+                dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[5, 5])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    if len(filt_cc) > 0:
+        xv = [len(obj.frames[:obj.start]) for obj in filt_cc]
+        xv1 = timestep * np.arange(np.amax(xv))
+        yv = np.full([len(xv), np.amax(xv)], np.nan)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = 1.0 / np.asarray(filt_cc[i0].pixel_thresh_vol[:filt_cc[i0].start])
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' dilution factor. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+
+        yv = np.full([len(xv), np.amax(xv)], np.nan)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = np.asarray(filt_cc[i0].zproj_fl_c2[:filt_cc[i0].start]) / np.asarray(
+                filt_cc[i0].pixel_thresh_vol[:filt_cc[i0].start])
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' pACT1. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+        for i0 in range(len(filt_cc)):
+            yv[i0, :xv[i0]] = np.asarray(filt_cc[i0].zproj_fl[:filt_cc[i0].start]) / np.asarray(
+                filt_cc[i0].pixel_thresh_vol[:filt_cc[i0].start])
+        yv /= np.repeat(np.reshape(yv[:, 0], [yv.shape[0], 1]), yv.shape[1], axis=1)
+        thresh = np.nonzero(np.sum(~np.isnan(yv), axis=0) < 5)[0][0]
+        print 'threshold', thresh
+        temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
+                          label=' pWHI5. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+
+    plt.ylabel('Relative dilution')
+    plt.xlabel('Time post cell birth')
+    plt.legend()
+    plt.title('Dilution factor due to growth in G1')
+    fig.savefig(directory + '/g1_dilution_traces_thresh_post_birth_full_pop.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = [obj.pixel_thresh_vol[obj.start] for obj in filt_cc]
+        yv = []
+        for obj in filt_cc:
+            # temp = obj.int_fl[1]+obj.
+            yv1 = np.asarray(obj.pixel_thresh_fluor_vals_c2[obj.start:]) + np.asarray(obj.segment_fl_bud_c2[obj.start:])
+            xvtemp = np.asarray(range(len(obj.frames)-obj.start)) * timestep
+            temp1 = scipy.stats.linregress(xvtemp, yv1)
+            yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv) * scale ** 2*zscale, yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(filt_cc)), linestyle='None')
+    plt.xlabel('$V_s$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_thresh_c2_vs_thresh.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = [obj.pixel_thresh_vol[obj.start] for obj in filt_cc]
+        yv = []
+        for obj in filt_cc:
+            # temp = obj.int_fl[1]+obj.
+            yv1 = np.asarray(obj.pixel_thresh_fluor_vals[obj.start:]) + np.asarray(obj.segment_fl_bud[obj.start:])
+            xvtemp = np.asarray(range(len(obj.frames)-obj.start)) * timestep
+            temp1 = scipy.stats.linregress(xvtemp, yv1)
+            yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv) * scale ** 2*zscale, yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(filt_cc)), linestyle='None')
+    plt.xlabel('$V_s$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_thresh_c1_vs_thresh.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = [obj.pixel_thresh_vol[0] for obj in filt_cc]
+        yv = []
+        for obj in filt_cc:
+            # temp = obj.int_fl[1]+obj.
+            yv1 = np.asarray(obj.pixel_thresh_fluor_vals_c2) + np.asarray(obj.segment_fl_bud_c2)
+            xvtemp = np.asarray(range(len(obj.frames))) * timestep
+            temp1 = scipy.stats.linregress(xvtemp, yv1)
+            yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv) * scale ** 2*zscale, yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(filt_cc)), linestyle='None')
+    plt.xlabel('$V_b$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_thresh_c2_vb_thresh.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = [obj.pixel_thresh_vol[0] for obj in filt_cc]
+        yv = []
+        for obj in filt_cc:
+            # temp = obj.int_fl[1]+obj.
+            yv1 = np.asarray(obj.pixel_thresh_fluor_vals) + np.asarray(obj.segment_fl_bud)
+            xvtemp = np.asarray(range(len(obj.frames))) * timestep
+            temp1 = scipy.stats.linregress(xvtemp, yv1)
+            yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv) * scale ** 2*zscale, yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(filt_cc)), linestyle='None')
+    plt.xlabel('$V_b$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_thresh_c1_vb_thresh.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = [obj.pixel_thresh_vol[obj.start] for obj in filt_cc]
+        yv = []
+        for obj in filt_cc:
+            # temp = obj.int_fl[1]+obj.
+            yv1 = np.asarray(obj.zproj_fl_c2[obj.start:]) + np.asarray(obj.zproj_fl_bud_c2[obj.start:])
+            xvtemp = np.asarray(range(len(obj.frames)-obj.start)) * timestep
+            temp1 = scipy.stats.linregress(xvtemp, yv1)
+            yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv) * scale ** 2*zscale, yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(filt_cc)), linestyle='None')
+    plt.xlabel('$V_s$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_zproj_c2_vs_thresh.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = [obj.pixel_thresh_vol[obj.start] for obj in filt_cc]
+        yv = []
+        for obj in filt_cc:
+            # temp = obj.int_fl[1]+obj.
+            yv1 = np.asarray(obj.zproj_fl[obj.start:]) + np.asarray(obj.zproj_fl_bud[obj.start:])
+            xvtemp = np.asarray(range(len(obj.frames)-obj.start)) * timestep
+            temp1 = scipy.stats.linregress(xvtemp, yv1)
+            yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv) * scale ** 2*zscale, yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(filt_cc)), linestyle='None')
+    plt.xlabel('$V_s$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_zproj_c1_vs_thresh.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = [obj.pixel_thresh_vol[0] for obj in filt_cc]
+        yv = []
+        for obj in filt_cc:
+            # temp = obj.int_fl[1]+obj.
+            yv1 = np.asarray(obj.zproj_fl_c2) + np.asarray(obj.zproj_fl_bud_c2)
+            xvtemp = np.asarray(range(len(obj.frames))) * timestep
+            temp1 = scipy.stats.linregress(xvtemp, yv1)
+            yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv) * scale ** 2*zscale, yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(filt_cc)), linestyle='None')
+    plt.xlabel('$V_b$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_zproj_c2_vb_thresh.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = [obj.pixel_thresh_vol[0] for obj in filt_cc]
+        yv = []
+        for obj in filt_cc:
+            # temp = obj.int_fl[1]+obj.
+            yv1 = np.asarray(obj.zproj_fl) + np.asarray(obj.zproj_fl_bud)
+            xvtemp = np.asarray(range(len(obj.frames))) * timestep
+            temp1 = scipy.stats.linregress(xvtemp, yv1)
+            yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv) * scale ** 2*zscale, yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(filt_cc)), linestyle='None')
+    plt.xlabel('$V_b$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_zproj_c1_vb_thresh.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+
+    fig = plt.figure(figsize=[7, 7])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
+    if len(filt_cc) > 0:
+        xv = []
+        yv = []
+        for obj in filt_cc:
+            if obj.start>2:
+                xv.append(obj.pixel_thresh_vol[0] * scale ** 2 * zscale)
+                yv1 = np.asarray(obj.zproj_fl_c2[:obj.start])
+                xvtemp = np.asarray(range(obj.start)) * timestep
+                temp1 = scipy.stats.linregress(xvtemp, yv1)
+                yv.append(temp1[0])
+    # if len(filt_cc) > 0:
+    temp = scipy.stats.pearsonr(np.asarray(xv) * scale ** 3, yv)
+    plt.plot(np.asarray(xv), yv, marker='.',
+             label=' Z sum Fluor. PCC={0}, pval={1}, num cells={2}'.format(np.round(temp[0], 2), np.round(temp[1], 1),
+                                                                           len(xv)), linestyle='None')
+    plt.xlabel('$V_s$ ($\mu m^3$)')
+    plt.ylabel('Fluorescence rate of production')
+    plt.legend()
+    plt.title('Fluorescence rate of change')
+    fig.savefig(directory + '/df_zproj_c2_vbthresh_g1_slope.png', bbox_inches='tight', dpi=fig.dpi)
+    del fig
+
+    fig = plt.figure(figsize=[5, 5])
+    filt_cc = [obj for obj in cc if obj.complete and not (obj.error) and
+               not (obj.daughter is None)]
+    print len(filt_cc)
     if len(filt_cc) > 0:
         xv = [len(obj.frames) for obj in filt_cc]
         xv1 = timestep * np.arange(np.amax(xv))

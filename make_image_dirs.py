@@ -53,14 +53,94 @@ import shutil
 # date = '/180823'
 
 
-# Expt 180831 overexpression Whi5
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180910_pACT1_mKate2/timelapse'
-num_scenes = 8
-bkgd_scene = 8  # the last scene is the background
-num_frames = 73
-bf_base_name = '/180910_yFB11_12_mated_hap3_1_60X_5min_10lp_v1_w1Brightfield confocal'
-date = '/180910'
+# # Expt 180831 overexpression Whi5
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/180910_pACT1_mKate2/timelapse'
+# num_scenes = 8
+# bkgd_scene = 8  # the last scene is the background
+# num_frames = 73
+# bf_base_name = '/180910_yFB11_12_mated_hap3_1_60X_5min_10lp_v1_w1Brightfield confocal'
+# date = '/180910'
 
+
+# # Expt with Laura 181015
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181015_spinning_disk/timelapse'
+# num_scenes = 22
+# bkgd_scene = 22  # the last scene is the background
+# num_frames = 69
+# bf_base_name = '/2018_10_15_yLB256_yLB365_yFJB71_cellasics_01_w1Brightfield confocal'
+# date = '/2018_10_15'
+
+# # Diploid experiment 181004
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181004_diploid_pACT1_mKate2/timelapse'
+# num_scenes = 11
+# bkgd_scene = 11  # the last scene is the background
+# num_frames = 91
+# bf_base_name = '/181004_yFB71_72_diploid_pACT1_mKate2_60X_5min_10lp_D1_w1Brightfield confocal'
+# date = '/181004'
+
+# # Haploid expt 181115_yFB78
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181114_yFB78_Raff_125Gal/timelapse'
+# num_scenes = 13
+# bkgd_scene = 13  # the last scene is the background
+# num_frames = 70
+# bf_base_name = '/181114_yFB78_60X_2Raff_125Gal__w1Brightfield confocal'
+# date = '/181114'
+
+# # Fluorophore maturation expt 181204_yFB79
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181204_yFB79_fluor_maturation/CHX_timelapse'
+# num_scenes = 5
+# bkgd_scene = 5  # the last scene is the background
+# num_frames = 46
+# bf_base_name = '/181204_yFB79_60X_timelapse_CHX_w1Brightfield confocal'
+# date = '/181204'
+
+# # Fluorophore maturation expt 181204_yFB79
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181204_yFB79_fluor_maturation/CSM_timelapse'
+# num_scenes = 6
+# bkgd_scene = 6  # the last scene is the background
+# num_frames = 46
+# bf_base_name = '/181204_yFB79_60X_timelapse_good_w1Brightfield confocal'
+# date = '/181204'
+
+# # yFB79 timelapse expt 181207_yFB79
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal/timelapse'
+# num_scenes = 15
+# bkgd_scene = 15  # the last scene is the background
+# num_frames = 73
+# bf_base_name = '/181207_yFB79_60X_Raff_125uMGal_w1Brightfield confocal'
+# date = '/181207'
+
+# # yFB79 timelapse expt 181207_yFB79
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181212_yFB79_CSM_dex_fluor_maturation/CSM_timelapse'
+# num_scenes = 7
+# bkgd_scene = 7  # the last scene is the background
+# num_frames = 31
+# bf_base_name = '/181212_yFB79_60X_dex_fluor_maturation_timelapse_w1Brightfield confocal'
+# date = '/181212'
+
+# # yFB79 timelapse expt 181207_yFB79
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181212_yFB79_CSM_dex_fluor_maturation/CHX_timelapse'
+# num_scenes = 7
+# bkgd_scene = 7  # the last scene is the background
+# num_frames = 40
+# bf_base_name = '/181212_yFB79_60X_dex_fluor_maturation_timelapse1_w1Brightfield confocal'
+# date = '/181212'
+
+# # yFB7 CHX timelapse expt 181213_yFB7
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181213_yFB7_fluor_maturation/CHX_timelapse'
+# num_scenes = 7
+# bkgd_scene = 7  # the last scene is the background
+# num_frames = 46
+# bf_base_name = '/181212_yFB7_60X_dex_fluor_maturation_CHX_timelapse_w1Brightfield confocal'
+# date = '/181212'
+
+# yFB7 CSM timelapse expt 181213_yFB7
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181213_yFB7_fluor_maturation/CSM_timelapse'
+num_scenes = 6
+bkgd_scene = 6  # the last scene is the background
+num_frames = 46
+bf_base_name = '/181212_yFB7_60X_dex_fluor_maturation_timelapse_w1Brightfield confocal'
+date = '/181212'
 
 bkgd_extension = '_s{0}_t{1}.TIF'.format(bkgd_scene, 1)
 

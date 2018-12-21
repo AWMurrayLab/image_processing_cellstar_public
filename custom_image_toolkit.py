@@ -61,9 +61,15 @@ class Cell(object):
     def add_fluor_placeholders(self):
         self.int_fl = []
         self.coords = []
+        self.pixel_thresh_coords = []
+        self.pixel_thresh_fluor_vals_c2 = []
+        self.pixel_thresh_fluor_vals = []
         for temp_ind in range(len(self.frames)):
             self.int_fl.append([])
             self.coords.append([])
+            self.pixel_thresh_coords.append([0])
+            self.pixel_thresh_fluor_vals_c2.append(0)
+            self.pixel_thresh_fluor_vals.append(0)
 
 
 class CellCycle(object):
@@ -84,6 +90,21 @@ class CellCycle(object):
         self.nuclear_whi5 = [temp_cell.nuclear_whi5[temp_ind] for temp_ind in temp_parameters['range']]
         self.zproj_fl = [temp_cell.zproj_fluor_vals[temp_ind] for temp_ind in temp_parameters['range']]
         self.zproj_fl_c2 = [temp_cell.zproj_fluor_vals_c2[temp_ind] for temp_ind in temp_parameters['range']]
+        self.pixel_thresh_coords = [temp_cell.pixel_thresh_coords[temp_ind] for temp_ind in temp_parameters['range']]
+        self.pixel_thresh_fluor_vals_c2 = [temp_cell.pixel_thresh_fluor_vals_c2[temp_ind] for temp_ind in temp_parameters['range']]
+        self.pixel_thresh_fluor_vals = [temp_cell.pixel_thresh_fluor_vals[temp_ind] for temp_ind in temp_parameters['range']]
+        # print [len(obj) for obj in self.pixel_thresh_coords], self.data_origin, self.cell_index, self.frames
+        self.pixel_thresh_vol = []
+        for temp_ind in temp_parameters['range']:
+            if len(temp_cell.pixel_thresh_coords[temp_ind])==3:
+                self.pixel_thresh_vol.append(len(temp_cell.pixel_thresh_coords[temp_ind][0]))
+            else:
+                self.pixel_thresh_vol.append(0)
+                print 'Pixel thresholds unknown for Cell cycle {0}, cell {1}, frame {2}'.format(self.index,
+                                                                                                self.cell_index, temp_cell.frames[temp_ind])
+        # self.pixel_thresh_vol = [len(temp[0]) for temp in self.pixel_thresh_coords]  # needs to be scaled by volume
+        # of pixel in 3D.
+
         self.segment_coords = [temp_cell.segment_coords[temp_ind] for temp_ind in temp_parameters['range']]
         if temp_parameters['complete']:  # if this is a full cell cycle.
             self.tb = self.frames[0]
@@ -297,7 +318,8 @@ def add_fluorescence_traces_v1(temp_path, temp_cells, frame_list, current_frame,
     return temp_cells, temp_mask
 
 
-def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd, save_coords=True):
+def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd,
+                               save_coords=True, exists_c2=None):
     # This is the updated version of add_fluorescence_traces_v1, where we add both the pixels within the cell volume,
     # and also do a z-sum for the fluorescence above the 2d cell segmentation
     # save_coords is a boolean value which determines whether we store the pixel coordinates of each cell.
@@ -308,7 +330,8 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
     temp_mask = np.zeros(temp_im.shape)  # this will be a binary mask to track the location of each cell
 
     for temp_ind in frame_list:
-        i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+        # i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+        i0 = temp_cells[temp_ind].frames.index(current_frame)
         if current_frame != temp_cells[temp_ind].frames[i0]:
             print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
             raise ValueError('Wrong frame selected')
@@ -356,6 +379,9 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
         # print 'finished cell {0}'.format(temp_ind), temp_int_fl, len(saved_coords)
         for temp2 in saved_coords:
             temp_mask[(temp2[2], temp2[1], temp2[0])] = 1  # storing these coordinates in an array
+        if not(exists_c2 is None):  # if we have the data then we have to also add fluorescence integrated from
+            # segmented pixels
+            temp_cells[temp_ind].pixel_thresh_fluor_vals[i0] = np.sum(temp_im[temp_cells[temp_ind].pixel_thresh_coords[i0]])
     print 'Number of cells = {0}'.format(temp_ind)
     return temp_cells, temp_mask
 
@@ -375,6 +401,57 @@ def add_fluorescence_traces_c2(temp_path, temp_cells, frame_list, current_frame,
         temp_cells[temp_ind].zproj_fluor_vals_c2[i0] = np.sum(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
         # calculating the full z projection
     return temp_cells
+
+
+def add_fluorescence_traces_c2_v1(temp_path, temp_cells, frame_list, current_frame, bkgd, temp_bkgd):
+    # v1 differs from the base by also analyzing different ways of segmenting cell volume based on fluorescence
+    # This function adds the z-projected fluorescence above and below the 2d cell segmentation for a second fluorescence
+    # channel c2
+    bkgd_im1 = np.zeros(bkgd.shape)
+    temp1, temp2 = np.mean(bkgd, axis=0), np.std(bkgd, axis=0)
+    # taking the mean with respect to the z axis. Do it this way since there doesn't seem
+    # to be any systematic bias in that direction.
+    for i0 in range(bkgd.shape[0]):
+        bkgd_im1[i0, :, :] = temp1[:, :]+3*temp2
+    temp_im = io.imread(temp_path)
+    temp_mask = temp_im>bkgd_im1
+    temp_im1 = temp_im-temp_bkgd  # subtracting average background at each pixel value.
+    import seaborn as sns
+    figs=[]
+    temp_masks = []
+    for temp_ind in frame_list:
+        temp_binary_image = np.zeros(temp_im.shape)
+        i0 = temp_cells[temp_ind].frames.index(current_frame)
+        # i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+        if current_frame != temp_cells[temp_ind].frames[i0]:
+            print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
+            raise ValueError('Wrong frame selected')
+        # gives the index for the current frame in that cell's history
+        temp_coords = temp_cells[temp_ind].segment_coords[i0]
+        temp_cells[temp_ind].zproj_fluor_vals_c2[i0] = np.sum(temp_im1[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # calculating the full z projection
+
+        # Plotting option. This provides a way to visualize where the fluorescence sits relative to the background.
+
+        # temp_v1 = temp_im[:, temp_coords[:,0], temp_coords[:, 1]].flatten()
+        # temp_v2 = bkgd[:, temp_coords[:,0], temp_coords[:, 1]].flatten()
+        # fig = plt.figure(figsize=[5,5])
+        # sns.distplot(temp_v1, label='Full 3d Values')
+        # sns.distplot(temp_v2, label='Background values')
+        # plt.axvline(x=np.mean(temp_v2)+3*np.std(temp_v2))
+        # plt.legend()
+        # figs.append(fig)
+
+        # Generating the fluorescence and volume value integrated only over pixels where the fluorescence is high. Note
+        # we will also do this for Whi5, since the nucleus appears to be included in the constitutive fluor channel, so
+        # this should give a slightly more accurate measure for Whi5 fluorescence.
+        # while the vacuoles are excluded for both
+        temp_binary_image[:, temp_coords[:,0], temp_coords[:, 1]] = 1
+        temp_binary_image *= temp_mask
+        temp_cells[temp_ind].pixel_thresh_coords[i0] = np.nonzero(temp_binary_image)
+        temp_cells[temp_ind].pixel_thresh_fluor_vals_c2[i0] = np.sum(temp_im1[temp_cells[temp_ind].pixel_thresh_coords[i0]])
+        temp_masks.append(temp_binary_image)
+    return temp_cells, figs, temp_masks
 
 
 def find_min_distance(temp_array, temp_centroid):
@@ -747,6 +824,10 @@ def integrate_bud_data(temp_cycles):
             obj.ellipse_fit_bud = []
             obj.zproj_fl_bud = []
             obj.zproj_fl_bud_c2 = []
+            obj.segment_fl_bud = []
+            obj.segment_fl_bud_c2 = []
+            obj.segment_coords_bud = []
+            obj.segment_vol_bud = []
             obj.bud_seg = []
             for temp_ind in range(len(obj.frames)):
                 obj.zproj_fl_bud.append(0)
@@ -755,6 +836,10 @@ def integrate_bud_data(temp_cycles):
                 obj.ellipse_fit_bud.append(0)
                 obj.bud_seg.append(None)
                 obj.zproj_fl_bud_c2.append(0)
+                obj.segment_fl_bud.append(0)
+                obj.segment_fl_bud_c2.append(0)
+                obj.segment_coords_bud.append(0)
+                obj.segment_vol_bud.append(0)
             # print temp_cycles[obj.bud].frames, obj.frames
             bud_ind = indices.index(obj.bud)
             for ind in temp_cycles[bud_ind].frames:
@@ -768,6 +853,10 @@ def integrate_bud_data(temp_cycles):
                     obj.bud_seg[temp_ind] = temp_cycles[temp_bud_ind].segment_coords[ind-temp_cycles[temp_bud_ind].frames[0]]
                     obj.zproj_fl_bud_c2[temp_ind] = temp_cycles[temp_bud_ind].zproj_fl_c2[
                         ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.segment_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].pixel_thresh_fluor_vals[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.segment_fl_bud_c2[temp_ind] = temp_cycles[temp_bud_ind].pixel_thresh_fluor_vals_c2[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.segment_coords_bud[temp_ind] = temp_cycles[temp_bud_ind].pixel_thresh_coords[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.segment_vol_bud[temp_ind] = temp_cycles[temp_bud_ind].pixel_thresh_vol[ind - temp_cycles[temp_bud_ind].frames[0]]
                 else:
                     # print ind, obj.frames
                     obj.error = True
@@ -872,36 +961,40 @@ def inherit_lineage_properties(temp_cycles):
 
 
 def populate_cells_all_scenes_1(temp_base_path, temp_expt_path, temp_image_filename, temp_bf_filename,
-                                temp_num_scenes, temp_num_frames):
+                                temp_num_scenes, temp_num_frames, temp_sel_scenes=None):
     color_seq_val = plt.cm.tab10(np.linspace(0.0, 1.0, 11))
     dims = 512
     for scene in range(1, temp_num_scenes):
+        if not(temp_sel_scenes is None):
+            scene1 = temp_sel_scenes[scene-1]
+        else:
+            scene1 = scene
+        # print type(scene1)
         c = []  # this will track all the cells over this timelapse
         # making necessary directory tree
-        directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
+        directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene1)
         if not os.path.exists(directory):
             os.makedirs(directory)
         if not os.path.exists(directory + '/images'):
             os.makedirs(directory + '/images')
-        outlines = np.zeros([temp_num_frames[scene - 1], dims, dims])
-        for frame_num in range(1, temp_num_frames[scene - 1]):
+        outlines = np.zeros([temp_num_frames[scene1 - 1], dims, dims])
+        for frame_num in range(1, temp_num_frames[scene1 - 1]):
             filename = temp_image_filename+temp_bf_filename+'s{0}_t{1}_segmentation.mat'.format(
-                str(scene), str(frame_num).zfill(2))
-            path = temp_base_path + temp_expt_path + '/scene_{0}/segments/'.format(scene) + filename
+                str(scene1), str(frame_num).zfill(2))
+            path = temp_base_path + temp_expt_path + '/scene_{0}/segments/'.format(scene1) + filename
             tracking_csv_file = pd.DataFrame.from_csv(
-                temp_base_path + temp_expt_path + '/scene_{0}/segments/tracking/tracking.csv'.format(scene), index_col=None)
+                temp_base_path + temp_expt_path + '/scene_{0}/segments/tracking/tracking.csv'.format(scene1), index_col=None)
             c, im, fig, temp_outlines = single_frame(path, c, frame_num, tracking_csv_file, color_seq_val)
             outlines[frame_num - 1, :, :] = temp_outlines[:, :]
-
             fig.subplots_adjust(bottom=0)
             fig.subplots_adjust(top=1)
             fig.subplots_adjust(right=1)
             fig.subplots_adjust(left=0)
             # extent = mpl.transforms.Bbox(((0, 0), (5, 5)))
-            fig.savefig(directory + '/images/frame_{1}.tif'.format(scene, frame_num))
+            fig.savefig(directory + '/images/frame_{1}.tif'.format(scene1, frame_num))
             del im, fig
-        np.save(directory + '/cell_outlines_scene_{0}'.format(scene), outlines)
-        save_object(c, directory + '/cells_scene_{0}.pkl'.format(scene))
+        np.save(directory + '/cell_outlines_scene_{0}'.format(scene1), outlines)
+        save_object(c, directory + '/cells_scene_{0}.pkl'.format(scene1))
         del c
 
 
@@ -928,23 +1021,9 @@ def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filen
             update_list.append(
                 [i for i, e in enumerate(temp) if e != 0])  # gives the list of indices that have to be addressed
             # at each frame
-            # print update_list
-            filename_fl = temp_image_filename+temp_fl_filename+ 's{0}_t{1}.TIF'.format(str(scene), str(frame_num))
-            filename_fl_bkgd = temp_image_filename+temp_fl_filename + 's{0}_t{1}.TIF'.format(str(temp_bkgd_scene), str(frame_num))
-            # format is z, y, x
-            bkgd_im = io.imread(temp_base_path + temp_expt_path + filename_fl_bkgd)
-            bkgd_im1 = np.zeros(bkgd_im.shape)
-            temp1 = np.mean(bkgd_im, axis=0)
-            # taking the mean with respect to the z axis. Do it this way since there doesn't seem
-            # to be any systematic bias in that direction.
-            for i0 in range(bkgd_im.shape[0]):
-                bkgd_im1[i0, :, :] = temp1[:, :]
-            del temp1, bkgd_im
-            c, mask = add_fluorescence_traces_v2(temp_path=temp_base_path + temp_expt_path + filename_fl, temp_cells=c,
-                                                   frame_list=update_list[-1],
-                                                   current_frame=frame_num, z_scaling=z_scale, z_offset=z_offset,
-                                                   bkgd=bkgd_im1, save_coords=False)
-            io.imsave(directory + '/images/mask3d_s{0}_t{1}.TIF'.format(str(scene), str(frame_num)), mask)
+
+            # Adding the fluorescence data for the second channel. We do this because the second channel is the one with
+            # the strong constitutive fluor.
             if not(temp_fl_filename_c2 is None):  # if we have a second fluorescence channel in this experiment
                 filename_fl = temp_image_filename + temp_fl_filename_c2 + 's{0}_t{1}.TIF'.format(str(scene),
                                                                                               str(frame_num))
@@ -958,16 +1037,50 @@ def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filen
                 # to be any systematic bias in that direction.
                 for i0 in range(bkgd_im.shape[0]):
                     bkgd_im1[i0, :, :] = temp1[:, :]
-                del temp1, bkgd_im
-                c = add_fluorescence_traces_c2(temp_path=temp_base_path + temp_expt_path + filename_fl,
-                                                     temp_cells=c,
-                                                     frame_list=update_list[-1], current_frame=frame_num, bkgd=bkgd_im1)
+                del temp1
+
+                # Old method
+                # c = add_fluorescence_traces_c2(temp_path=temp_base_path + temp_expt_path + filename_fl,
+                #                                      temp_cells=c,
+                #                                      frame_list=update_list[-1], current_frame=frame_num, bkgd=bkgd_im1)
+
+                # Current method
+                # this adds a z integrated fluorescence in addition to segmenting individual pixels based on brightness,
+                # adding the coordinates for these bright pixels, and using them to calculate a more "accurate" size
+                # estimate.
+                c, figs, temp_masks = add_fluorescence_traces_c2_v1(temp_path=temp_base_path + temp_expt_path + filename_fl,
+                                                  temp_cells=c, frame_list=update_list[-1], current_frame=frame_num,
+                                                                    bkgd=bkgd_im, temp_bkgd=bkgd_im1)
+                # saving the figures in figs. This is only necessary if you want to track how good the segmentation is
+                # since it saves a separate image for each cell.
+                # for ind in range(len(figs)):
+                #     figs[ind].savefig(directory+'/images/cell_fluor_plots/scene{0}_frame_{1}_cell_{2}.png'.format(scene, frame_num, ind))
+                #     np.save(directory+'/images/cell_fluor_plots/scene{0}_frame_{1}_cell_{2}'.format(scene, frame_num, ind), temp_masks[ind])
+
+            filename_fl = temp_image_filename+temp_fl_filename + 's{0}_t{1}.TIF'.format(str(scene), str(frame_num))
+            filename_fl_bkgd = temp_image_filename+temp_fl_filename + 's{0}_t{1}.TIF'.format(str(temp_bkgd_scene), str(frame_num))
+            # format is z, y, x
+            bkgd_im = io.imread(temp_base_path + temp_expt_path + filename_fl_bkgd)
+            bkgd_im1 = np.zeros(bkgd_im.shape)
+            temp1 = np.mean(bkgd_im, axis=0)
+            # taking the mean with respect to the z axis. Do it this way since there doesn't seem
+            # to be any systematic bias in that direction.
+            for i0 in range(bkgd_im.shape[0]):
+                bkgd_im1[i0, :, :] = temp1[:, :]
+            del temp1, bkgd_im
+            c, mask = add_fluorescence_traces_v2(temp_path=temp_base_path + temp_expt_path + filename_fl, temp_cells=c,
+                                                   frame_list=update_list[-1],
+                                                   current_frame=frame_num, z_scaling=z_scale, z_offset=z_offset,
+                                                   bkgd=bkgd_im1, save_coords=False, exists_c2=temp_fl_filename_c2)
+            io.imsave(directory + '/images/mask3d_s{0}_t{1}.TIF'.format(str(scene), str(frame_num)), mask)
+
             print 'done scene {0}, frame {1}'.format(scene, frame_num)
         save_object(c, directory + '/cells_fl_scene_{0}.pkl'.format(scene))
 
 
 def populate_cells_all_scenes_2_v2(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename,
-                                temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_bkgd_details=None):
+                                temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_bkgd_details=None,
+                                   temp_sel_scenes=None):
     # This is the same as populate_cells_all_scenes_2 with the difference that it allows one to not have a separate
     # background frame, but to instead define a set of coordinates in a single scene to calculate the background from.
     # To do this, temp_bkgd_details should have the format [scene_num, [xmin, xmax], [ymin, ymax]]. This is only
@@ -978,7 +1091,11 @@ def populate_cells_all_scenes_2_v2(temp_base_path, temp_expt_path, temp_image_fi
 
     color_seq_val = plt.cm.tab10(np.linspace(0.0, 1.0, 11))
     generate_masks = True
-    for scene in range(1, temp_num_scenes):
+    for scene1 in range(1, temp_num_scenes):
+        if not(temp_sel_scenes is None):
+            scene = temp_sel_scenes[scene1-1]
+        else:
+            scene = scene1
         print 'scene = {0}'.format(scene)
         directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
         with open(directory + '/cells_scene_{0}.pkl'.format(scene), 'rb') as input:
@@ -1123,7 +1240,7 @@ def track_localization_manual_annotation(temp_base_path, temp_expt_path, temp_im
 
 def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename, temp_num_frames,
                               temp_analyzed_scene, temp_num_scenes, temp_threshold, temp_drange, temp_analyzed_frames,
-                              temp_label_path):
+                              temp_label_path, temp_sel_scenes=None):
     # temp_label_path determines whether we use the output from populate_cells_all_scenes_3 or 2.
     directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_analyzed_scene)
 
@@ -1246,7 +1363,11 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
     # Automatically classifying cells based on skewness cutoff
     automate_analysis = 1
     if automate_analysis:
-        for scene in range(1, temp_num_scenes):
+        for scene1 in range(1, temp_num_scenes):
+            if not(temp_sel_scenes is None):  # if we have only selected a certain number of scenes to look at here.
+                scene = temp_sel_scenes[scene1-1]
+            else:
+                scene = scene1
             print 'Working on Scene number {0}'.format(scene)
             directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
             if temp_label_path is None:  # in this case we didn't do the labeling since we don't have labels
@@ -1745,10 +1866,14 @@ def validate_cycles(temp_base_path, temp_expt_path, temp_image_filename, temp_bf
 
 
 def label_boundaries(temp_base_path, temp_expt_path, temp_image_filename, temp_bf_filename, temp_num_scenes,
-                     temp_num_frames):
+                     temp_num_frames, temp_sel_scenes=None):
     cells = []
     bdys = set([0, 511])
-    for scene in range(1, temp_num_scenes):
+    for scene1 in range(1, temp_num_scenes):
+        if not(temp_sel_scenes is None):
+            scene = temp_sel_scenes[scene1-1]
+        else:
+            scene = scene1
         with open(temp_base_path+temp_expt_path + '/scene_{0}/outputs/cells_fl_scene_{0}.pkl'.format(scene), 'rb') as input:
             temp_cells = pickle.load(input)
         for obj in temp_cells:
