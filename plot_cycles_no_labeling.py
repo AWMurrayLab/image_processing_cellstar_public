@@ -1246,7 +1246,7 @@ fig.savefig(directory+'/'+'concentration_ratios.png', bbox_inches='tight', dpi=f
 
 import seaborn as sns
 fig = plt.figure(figsize=[5, 5])
-
+pops = ['Pwhi5', 'Pgal']
 for ind in range(2):
     filt_cc = [obj for obj in cc if obj.label_type == ind and obj.complete and not (obj.error) and
                not (obj.daughter is None)]
