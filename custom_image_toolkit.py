@@ -25,7 +25,7 @@ class Cell(object):
     def __init__(self, birth_parameters):  # birth parameters = [tb, celltype, parent, vb, parent_current]
         self.exists = True
         # these are present for all cells
-        self.index = birth_parameters['index']
+        self.index = birth_parameters['index']  # note this starts from 1 as is defined by cellstar
         self.frames = [birth_parameters['current_frame']]
         self.position = [birth_parameters['centroid']]  # X then Y
         self.index_image = [birth_parameters['index_image']]
@@ -37,6 +37,7 @@ class Cell(object):
         self.fluor_vals = [0]  # list of fluorescence values at each timepoint.
         self.segment_coords = [birth_parameters['segment_coords']]
         self.zproj_fluor_vals = [0]
+        self.zproj_fluor_vals_c2 = [0]
         # if
         # self.
         # self.celltype = birth_parameters[1]  # 0 is mother, 1 is daughter
@@ -55,22 +56,30 @@ class Cell(object):
         self.nuclear_whi5.append(0)
         self.fluor_vals.append(0)
         self.zproj_fluor_vals.append(0)
+        self.zproj_fluor_vals_c2.append(0)
         self.segment_coords.append(frame_parameters['segment_coords'])
 
     def add_fluor_placeholders(self):
         self.int_fl = []
         self.coords = []
+        self.pixel_thresh_coords = []
+        self.pixel_thresh_fluor_vals_c2 = []
+        self.pixel_thresh_fluor_vals = []
         for temp_ind in range(len(self.frames)):
             self.int_fl.append([])
             self.coords.append([])
+            self.pixel_thresh_coords.append([0])
+            self.pixel_thresh_fluor_vals_c2.append(0)
+            self.pixel_thresh_fluor_vals.append(0)
 
 
 class CellCycle(object):
     cellCount = 0  # total number of cell cycles tracked
 
     def __init__(self, temp_cell, temp_parameters):  # generating a placeholder cell which will be fully updated later.
-        self.index = temp_parameters['index']  # this will be the unique index of this cell cycle
-        self.cell_index = temp_parameters['cell_index']  # this is the index of the cell this came from
+        self.index = CellCycle.cellCount  # this will be the unique index of this cell cycle
+        # self.index = temp_parameters['index']  # this will be the unique index of this cell cycle
+        self.cell_index = temp_parameters['cell_index']  # this is the unique identifier of the cell this came from
         self.cc_num = temp_parameters['cc_num']  # this is the number of the cell cycle in the cell this came from
         self.complete = temp_parameters['complete']  # whether this corresponds to a full cell cycle or not
         self.frames = [temp_cell.frames[temp_ind] for temp_ind in temp_parameters['range']]
@@ -81,6 +90,22 @@ class CellCycle(object):
         self.label_type = temp_cell.type
         self.nuclear_whi5 = [temp_cell.nuclear_whi5[temp_ind] for temp_ind in temp_parameters['range']]
         self.zproj_fl = [temp_cell.zproj_fluor_vals[temp_ind] for temp_ind in temp_parameters['range']]
+        self.zproj_fl_c2 = [temp_cell.zproj_fluor_vals_c2[temp_ind] for temp_ind in temp_parameters['range']]
+        self.pixel_thresh_coords = [temp_cell.pixel_thresh_coords[temp_ind] for temp_ind in temp_parameters['range']]
+        self.pixel_thresh_fluor_vals_c2 = [temp_cell.pixel_thresh_fluor_vals_c2[temp_ind] for temp_ind in temp_parameters['range']]
+        self.pixel_thresh_fluor_vals = [temp_cell.pixel_thresh_fluor_vals[temp_ind] for temp_ind in temp_parameters['range']]
+        # print [len(obj) for obj in self.pixel_thresh_coords], self.data_origin, self.cell_index, self.frames
+        self.pixel_thresh_vol = []
+        for temp_ind in temp_parameters['range']:
+            if len(temp_cell.pixel_thresh_coords[temp_ind])==3:
+                self.pixel_thresh_vol.append(len(temp_cell.pixel_thresh_coords[temp_ind][0]))
+            else:
+                self.pixel_thresh_vol.append(0)
+                print 'Pixel thresholds unknown for Cell cycle {0}, cell {1}, frame {2}'.format(self.index,
+                                                                                                self.cell_index, temp_cell.frames[temp_ind])
+        # self.pixel_thresh_vol = [len(temp[0]) for temp in self.pixel_thresh_coords]  # needs to be scaled by volume
+        # of pixel in 3D.
+
         self.segment_coords = [temp_cell.segment_coords[temp_ind] for temp_ind in temp_parameters['range']]
         if temp_parameters['complete']:  # if this is a full cell cycle.
             self.tb = self.frames[0]
@@ -96,8 +121,8 @@ class CellCycle(object):
         self.next_gen = None  # gives the index of the next generation of this cell cycle if it exists
         self.prev_gen = None  # gives the index of the previous generation of this cell cycle if it exists
         self.bud = None  # gives the index of the bud for this cell if it exists
-        self.parent = None  # gives the index of the cell cycle for the "parent" cell in which it produced the current
-        # cell (if there is one)
+        self.parent = None  # gives the unique index of the cell cycle for the "parent" cell in which it produced the
+        # current cell (if there is one)
         self.family = None
         CellCycle.cellCount += 1
 
@@ -294,7 +319,8 @@ def add_fluorescence_traces_v1(temp_path, temp_cells, frame_list, current_frame,
     return temp_cells, temp_mask
 
 
-def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd, save_coords=True):
+def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd,
+                               save_coords=True, exists_c2=None):
     # This is the updated version of add_fluorescence_traces_v1, where we add both the pixels within the cell volume,
     # and also do a z-sum for the fluorescence above the 2d cell segmentation
     # save_coords is a boolean value which determines whether we store the pixel coordinates of each cell.
@@ -305,7 +331,8 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
     temp_mask = np.zeros(temp_im.shape)  # this will be a binary mask to track the location of each cell
 
     for temp_ind in frame_list:
-        i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+        # i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+        i0 = temp_cells[temp_ind].frames.index(current_frame)
         if current_frame != temp_cells[temp_ind].frames[i0]:
             print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
             raise ValueError('Wrong frame selected')
@@ -353,8 +380,79 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
         # print 'finished cell {0}'.format(temp_ind), temp_int_fl, len(saved_coords)
         for temp2 in saved_coords:
             temp_mask[(temp2[2], temp2[1], temp2[0])] = 1  # storing these coordinates in an array
+        if not(exists_c2 is None):  # if we have the data then we have to also add fluorescence integrated from
+            # segmented pixels
+            temp_cells[temp_ind].pixel_thresh_fluor_vals[i0] = np.sum(temp_im[temp_cells[temp_ind].pixel_thresh_coords[i0]])
     print 'Number of cells = {0}'.format(temp_ind)
     return temp_cells, temp_mask
+
+
+def add_fluorescence_traces_c2(temp_path, temp_cells, frame_list, current_frame, bkgd):
+    # This function adds the z-projected fluorescence above and below the 2d cell segmentation for a second fluorescence
+    # channel c2
+    temp_im = io.imread(temp_path)-bkgd  # subtracting the average background at each xy point. Structure is (z,y,x)
+
+    for temp_ind in frame_list:
+        i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+        if current_frame != temp_cells[temp_ind].frames[i0]:
+            print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
+            raise ValueError('Wrong frame selected')
+        # gives the index for the current frame in that cell's history
+        temp_coords = temp_cells[temp_ind].segment_coords[i0]
+        temp_cells[temp_ind].zproj_fluor_vals_c2[i0] = np.sum(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # calculating the full z projection
+    return temp_cells
+
+
+def add_fluorescence_traces_c2_v1(temp_path, temp_cells, frame_list, current_frame, bkgd, temp_bkgd):
+    # v1 differs from the base by also analyzing different ways of segmenting cell volume based on fluorescence
+    # This function adds the z-projected fluorescence above and below the 2d cell segmentation for a second fluorescence
+    # channel c2
+    bkgd_im1 = np.zeros(bkgd.shape)
+    temp1, temp2 = np.mean(bkgd, axis=0), np.std(bkgd, axis=0)
+    # taking the mean with respect to the z axis. Do it this way since there doesn't seem
+    # to be any systematic bias in that direction.
+    for i0 in range(bkgd.shape[0]):
+        bkgd_im1[i0, :, :] = temp1[:, :]+3*temp2
+    temp_im = io.imread(temp_path)
+    temp_mask = temp_im>bkgd_im1
+    temp_im1 = temp_im-temp_bkgd  # subtracting average background at each pixel value.
+    import seaborn as sns
+    figs=[]
+    temp_masks = []
+    for temp_ind in frame_list:
+        temp_binary_image = np.zeros(temp_im.shape)
+        i0 = temp_cells[temp_ind].frames.index(current_frame)
+        # i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+        if current_frame != temp_cells[temp_ind].frames[i0]:
+            print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
+            raise ValueError('Wrong frame selected')
+        # gives the index for the current frame in that cell's history
+        temp_coords = temp_cells[temp_ind].segment_coords[i0]
+        temp_cells[temp_ind].zproj_fluor_vals_c2[i0] = np.sum(temp_im1[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # calculating the full z projection
+
+        # Plotting option. This provides a way to visualize where the fluorescence sits relative to the background.
+
+        # temp_v1 = temp_im[:, temp_coords[:,0], temp_coords[:, 1]].flatten()
+        # temp_v2 = bkgd[:, temp_coords[:,0], temp_coords[:, 1]].flatten()
+        # fig = plt.figure(figsize=[5,5])
+        # sns.distplot(temp_v1, label='Full 3d Values')
+        # sns.distplot(temp_v2, label='Background values')
+        # plt.axvline(x=np.mean(temp_v2)+3*np.std(temp_v2))
+        # plt.legend()
+        # figs.append(fig)
+
+        # Generating the fluorescence and volume value integrated only over pixels where the fluorescence is high. Note
+        # we will also do this for Whi5, since the nucleus appears to be included in the constitutive fluor channel, so
+        # this should give a slightly more accurate measure for Whi5 fluorescence.
+        # while the vacuoles are excluded for both
+        temp_binary_image[:, temp_coords[:,0], temp_coords[:, 1]] = 1
+        temp_binary_image *= temp_mask
+        temp_cells[temp_ind].pixel_thresh_coords[i0] = np.nonzero(temp_binary_image)
+        temp_cells[temp_ind].pixel_thresh_fluor_vals_c2[i0] = np.sum(temp_im1[temp_cells[temp_ind].pixel_thresh_coords[i0]])
+        temp_masks.append(temp_binary_image)
+    return temp_cells, figs, temp_masks
 
 
 def find_min_distance(temp_array, temp_centroid):
@@ -577,6 +675,8 @@ def compare_distances(temp_cells, temp_inds, temp_coord, temp_timepoints):
 
 def assign_md_pair(temp_cells, mother_ind, daughter_ind, temp_frame_num):
     # first just check that this division event hasn't already been tracked
+    # Note that the input indices here should not be the unique cell identifiers,
+    # but rather the index in temp_cells.
     if not(temp_frame_num in temp_cells[mother_ind].daughter_assignment_frames):
         temp_cells[mother_ind].daughters.append(temp_cells[daughter_ind].index)
         temp_cells[daughter_ind].parent = temp_cells[mother_ind].index
@@ -590,6 +690,7 @@ def assign_md_pair(temp_cells, mother_ind, daughter_ind, temp_frame_num):
 
 def create_cycles(temp_cells, temp_ind, temp_cycles, ind, temp_data_origin):
     # take a cell and generate cycles for each of its individual cycles, which will be appended to temp_cycles
+    temp_cells_indexes = [obj.index for obj in temp_cells]
     temp_cells[temp_ind].temp_cycle_inds = []
     temp_obj = temp_cells[temp_ind]
 
@@ -613,7 +714,7 @@ def create_cycles(temp_cells, temp_ind, temp_cycles, ind, temp_data_origin):
         # gives the indices of the appropriate time points for this cell cycle (relative to the starting tracking time
         # of the cell in question)
         temp_params = {'range': range_timepoints, 'complete': None, 'parent': None, 'error': False,
-                       'start': None, 'index': ind, 'cc_num': temp_gen, 'cell_index': temp_ind,
+                       'start': None, 'cc_num': temp_gen, 'cell_index': temp_cells_indexes[temp_ind],
                        'data_origin': temp_data_origin}
         temp_cells[temp_ind].temp_cycle_inds.append(ind)  # keeping track of where this cycle is in the initial cell
         # list
@@ -642,17 +743,18 @@ def stitch_cycles(temp_cells, temp_cycles, temp_ind):
     # cell. Updates their mothers as well, so that run over the whole population, this should give the full number of
     # annotations.
     temp_obj = temp_cells[temp_ind]
-    temp_inds = temp_obj.temp_cycle_inds
+    temp_inds = temp_obj.temp_cycle_inds  # list of locations of cell cycles in temp_cycles associated with cell.
+    # NOT unique identifier
     temp_c_inds = [obj.index for obj in temp_cells]
     temp_cc_inds = [obj.index for obj in temp_cycles]
-    tv1 = [obj.index for obj in temp_cycles]
-    tv2 = [temp_cycles[tv1.index(i0)] for i0 in temp_obj.temp_cycle_inds]  # gives a list with the linked cycles from a
+    # tv1 = [obj.index for obj in temp_cycles]
+    # tv2 = [temp_cycles[tv1.index(i0)] for i0 in temp_obj.temp_cycle_inds]  # gives a list with the linked cycles from a
     # given cell. Must be length at least 1.
     for i0 in range(len(temp_inds)-1):
-        # assigning next generation
-        temp_cycles[temp_inds[i0]].next_gen = temp_inds[i0+1]
-        # assigning parent generation
-        temp_cycles[temp_inds[i0+1]].prev_gen = temp_inds[i0]
+        # assigning next generation. Unique cc identifier.
+        temp_cycles[temp_inds[i0]].next_gen = temp_cc_inds[temp_inds[i0+1]]
+        # assigning parent generation. Unique cc identifier.
+        temp_cycles[temp_inds[i0+1]].prev_gen = temp_cc_inds[temp_inds[i0]]
 
     if not(temp_obj.parent is None):  # in this case, the cell in question tracked had its birth tracked
         temp_cycles[temp_inds[0]].celltype = 2  # bud
@@ -665,9 +767,11 @@ def stitch_cycles(temp_cells, temp_cycles, temp_ind):
         temp_parent = temp_cells[temp_c_inds.index(temp_obj.parent)]  # gives the parent cell
         # print len(temp_parent.temp_cycle_inds), temp_parent.daughters.index(temp_obj.index)
         # print temp_parent.temp_cycle_inds, temp_parent.daughters
-        if temp_cycles[temp_inds[0]].frames[-1] in temp_parent.daughter_assignment_frames:  # only assign daughters
+        if (temp_cycles[temp_inds[0]].frames[-1] in temp_parent.daughter_assignment_frames)\
+                and (temp_parent.daughters[temp_parent.daughter_assignment_frames.index(temp_cycles[temp_inds[0]].frames[-1])] == temp_obj.index):
+            # only assign daughters if we know its parent is recording the correct division event.
             # print temp_cycles[temp_inds[0]].frames[-1], temp_parent.daughter_assignment_frames
-            # if this is correct
+
             temp_index = temp_parent.daughter_assignment_frames.index(temp_cycles[temp_inds[0]].frames[-1])
             # gives the index at which the parent cell gave birth to this daughter
             if not temp_parent.daughters[temp_index] == temp_obj.index:
@@ -684,16 +788,18 @@ def stitch_cycles(temp_cells, temp_cycles, temp_ind):
                                         temp_parent.frames.index(temp_cycles[temp_inds[0]].frames[-1]))
             # gives the index of the cell cycle for the parent cell with which this birth is associated.
             temp_parent_cc_index = temp_parent.temp_cycle_inds[temp_index1]  # gives the
-            # index of the cell cycle for the parent cellst
+            # index of the cell cycle for the parent within the list of cell cycles
             # temp_parent_cc_index = temp_parent.temp_cycle_inds[temp_parent.daughters.index(temp_obj.index)]  # gives the
             # index of the cell cycle for the parent cell
 
-            temp_cycles[temp_inds[0]].parent = temp_parent_cc_index
-            temp_cycles[temp_parent_cc_index].bud = temp_inds[0]  # defining the bud for the parent cell
+            temp_cycles[temp_inds[0]].parent = temp_cc_inds[temp_parent_cc_index]
+            temp_cycles[temp_parent_cc_index].bud = temp_cc_inds[temp_inds[0]]
+            # defining the bud for the parent cell cycle
             if len(temp_inds) > 1:
-                temp_cycles[temp_parent_cc_index].daughter = temp_inds[1]  # defining the daughter for the parent cell
-                temp_cycles[temp_inds[1]].mother = temp_parent_cc_index  # assigning a handle for the mother cell of the
-                # daughter
+                temp_cycles[temp_parent_cc_index].daughter = temp_cc_inds[temp_inds[1]]
+                # defining the daughter for the parent cell
+                temp_cycles[temp_inds[1]].mother = temp_cc_inds[temp_parent_cc_index]
+                # assigning a handle for the mother cell of the daughter
     elif len(temp_inds) > 1:  # in this case, we never assigned a parent for the current cell, so latter generations are
         # mothers and the first one is "unknown"
         for i1 in range(1, len(temp_inds)):
@@ -718,6 +824,11 @@ def integrate_bud_data(temp_cycles):
             obj.vbud = []
             obj.ellipse_fit_bud = []
             obj.zproj_fl_bud = []
+            obj.zproj_fl_bud_c2 = []
+            obj.segment_fl_bud = []
+            obj.segment_fl_bud_c2 = []
+            obj.segment_coords_bud = []
+            obj.segment_vol_bud = []
             obj.bud_seg = []
             for temp_ind in range(len(obj.frames)):
                 obj.zproj_fl_bud.append(0)
@@ -725,20 +836,32 @@ def integrate_bud_data(temp_cycles):
                 obj.int_fl_bud.append(0)
                 obj.ellipse_fit_bud.append(0)
                 obj.bud_seg.append(None)
+                obj.zproj_fl_bud_c2.append(0)
+                obj.segment_fl_bud.append(0)
+                obj.segment_fl_bud_c2.append(0)
+                obj.segment_coords_bud.append(0)
+                obj.segment_vol_bud.append(0)
             # print temp_cycles[obj.bud].frames, obj.frames
             bud_ind = indices.index(obj.bud)
             for ind in temp_cycles[bud_ind].frames:
                 if ind in obj.frames:
                     temp_ind = obj.frames.index(ind)
-                    obj.vbud[temp_ind] = temp_cycles[obj.bud].ellipse_volume[ind-temp_cycles[obj.bud].frames[0]]
-                    obj.int_fl_bud[temp_ind] = temp_cycles[obj.bud].int_fl[ind-temp_cycles[obj.bud].frames[0]]
-                    obj.zproj_fl_bud[temp_ind] = temp_cycles[obj.bud].zproj_fl[ind - temp_cycles[obj.bud].frames[0]]
-                    obj.ellipse_fit_bud[temp_ind] = temp_cycles[obj.bud].ellipse_fit[ind - temp_cycles[obj.bud].frames[0]]
-                    obj.bud_seg[temp_ind] = temp_cycles[obj.bud].segment_coords[ind-temp_cycles[obj.bud].frames[0]]
+                    temp_bud_ind = indices.index(obj.bud)
+                    obj.vbud[temp_ind] = temp_cycles[temp_bud_ind].ellipse_volume[ind-temp_cycles[temp_bud_ind].frames[0]]
+                    obj.int_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].int_fl[ind-temp_cycles[temp_bud_ind].frames[0]]
+                    obj.zproj_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].zproj_fl[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.ellipse_fit_bud[temp_ind] = temp_cycles[temp_bud_ind].ellipse_fit[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.bud_seg[temp_ind] = temp_cycles[temp_bud_ind].segment_coords[ind-temp_cycles[temp_bud_ind].frames[0]]
+                    obj.zproj_fl_bud_c2[temp_ind] = temp_cycles[temp_bud_ind].zproj_fl_c2[
+                        ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.segment_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].pixel_thresh_fluor_vals[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.segment_fl_bud_c2[temp_ind] = temp_cycles[temp_bud_ind].pixel_thresh_fluor_vals_c2[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.segment_coords_bud[temp_ind] = temp_cycles[temp_bud_ind].pixel_thresh_coords[ind - temp_cycles[temp_bud_ind].frames[0]]
+                    obj.segment_vol_bud[temp_ind] = temp_cycles[temp_bud_ind].pixel_thresh_vol[ind - temp_cycles[temp_bud_ind].frames[0]]
                 else:
                     # print ind, obj.frames
                     obj.error = True
-                    temp_cycles[obj.bud].error = True
+                    temp_cycles[temp_bud_ind].error = True
 
     return temp_cycles
 
@@ -746,7 +869,7 @@ def integrate_bud_data(temp_cycles):
 def generate_tree(temp_cycles, temp_ind):
     # returns a list with the unique indices of all connected cells for a cell with a given unique index
     temp_inds = [obj.index for obj in temp_cycles]
-    temp_tree = [temp_inds.index(temp_ind)]
+    temp_tree = [temp_inds[temp_ind]]
     for ind in temp_tree:
         temp_obj = temp_cycles[temp_inds.index(ind)]
         # get all the indices of directly related cells.
@@ -839,42 +962,47 @@ def inherit_lineage_properties(temp_cycles):
 
 
 def populate_cells_all_scenes_1(temp_base_path, temp_expt_path, temp_image_filename, temp_bf_filename,
-                                temp_num_scenes, temp_num_frames):
+                                temp_num_scenes, temp_num_frames, temp_sel_scenes=None):
     color_seq_val = plt.cm.tab10(np.linspace(0.0, 1.0, 11))
     dims = 512
     for scene in range(1, temp_num_scenes):
+        if not(temp_sel_scenes is None):
+            scene1 = temp_sel_scenes[scene-1]
+        else:
+            scene1 = scene
+        # print type(scene1)
         c = []  # this will track all the cells over this timelapse
         # making necessary directory tree
-        directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
+        directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene1)
         if not os.path.exists(directory):
             os.makedirs(directory)
         if not os.path.exists(directory + '/images'):
             os.makedirs(directory + '/images')
-        outlines = np.zeros([temp_num_frames[scene - 1], dims, dims])
-        for frame_num in range(1, temp_num_frames[scene - 1]):
+        outlines = np.zeros([temp_num_frames[scene1 - 1], dims, dims])
+        for frame_num in range(1, temp_num_frames[scene1 - 1]):
             filename = temp_image_filename+temp_bf_filename+'s{0}_t{1}_segmentation.mat'.format(
-                str(scene), str(frame_num).zfill(2))
-            path = temp_base_path + temp_expt_path + '/scene_{0}/segments/'.format(scene) + filename
+                str(scene1), str(frame_num).zfill(2))
+            path = temp_base_path + temp_expt_path + '/scene_{0}/segments/'.format(scene1) + filename
             tracking_csv_file = pd.DataFrame.from_csv(
-                temp_base_path + temp_expt_path + '/scene_{0}/segments/tracking/tracking.csv'.format(scene), index_col=None)
+                temp_base_path + temp_expt_path + '/scene_{0}/segments/tracking/tracking.csv'.format(scene1), index_col=None)
             c, im, fig, temp_outlines = single_frame(path, c, frame_num, tracking_csv_file, color_seq_val)
             outlines[frame_num - 1, :, :] = temp_outlines[:, :]
-
             fig.subplots_adjust(bottom=0)
             fig.subplots_adjust(top=1)
             fig.subplots_adjust(right=1)
             fig.subplots_adjust(left=0)
             # extent = mpl.transforms.Bbox(((0, 0), (5, 5)))
-            fig.savefig(directory + '/images/frame_{1}.tif'.format(scene, frame_num))
+            fig.savefig(directory + '/images/frame_{1}.tif'.format(scene1, frame_num))
             del im, fig
-        np.save(directory + '/cell_outlines_scene_{0}'.format(scene), outlines)
-        save_object(c, directory + '/cells_scene_{0}.pkl'.format(scene))
+        np.save(directory + '/cell_outlines_scene_{0}'.format(scene1), outlines)
+        save_object(c, directory + '/cells_scene_{0}.pkl'.format(scene1))
         del c
 
 
 def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename,
-                                temp_num_scenes, temp_num_frames, temp_bkgd_scene):
+                                temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_fl_filename_c2=None):
     # this takes the cell output from script populate_cells_1.py and adds fluorescence data to it
+    # temp_fl_filename_c2 is the filename of the secondary fluorescence channel (primary corresponds to Whi5).
     pixel_size = {'60X': 0.267, '100X': 0.16}
     z_scale, z_offset = 0.4 / pixel_size['60X'], 0
 
@@ -894,8 +1022,43 @@ def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filen
             update_list.append(
                 [i for i, e in enumerate(temp) if e != 0])  # gives the list of indices that have to be addressed
             # at each frame
-            # print update_list
-            filename_fl = temp_image_filename+temp_fl_filename+ 's{0}_t{1}.TIF'.format(str(scene), str(frame_num))
+
+            # Adding the fluorescence data for the second channel. We do this because the second channel is the one with
+            # the strong constitutive fluor.
+            if not(temp_fl_filename_c2 is None):  # if we have a second fluorescence channel in this experiment
+                filename_fl = temp_image_filename + temp_fl_filename_c2 + 's{0}_t{1}.TIF'.format(str(scene),
+                                                                                              str(frame_num))
+                filename_fl_bkgd = temp_image_filename + temp_fl_filename_c2 + \
+                                   's{0}_t{1}.TIF'.format(str(temp_bkgd_scene), str(frame_num))
+                # format is z, y, x
+                bkgd_im = io.imread(temp_base_path + temp_expt_path + filename_fl_bkgd)
+                bkgd_im1 = np.zeros(bkgd_im.shape)
+                temp1 = np.mean(bkgd_im, axis=0)
+                # taking the mean with respect to the z axis. Do it this way since there doesn't seem
+                # to be any systematic bias in that direction.
+                for i0 in range(bkgd_im.shape[0]):
+                    bkgd_im1[i0, :, :] = temp1[:, :]
+                del temp1
+
+                # Old method
+                # c = add_fluorescence_traces_c2(temp_path=temp_base_path + temp_expt_path + filename_fl,
+                #                                      temp_cells=c,
+                #                                      frame_list=update_list[-1], current_frame=frame_num, bkgd=bkgd_im1)
+
+                # Current method
+                # this adds a z integrated fluorescence in addition to segmenting individual pixels based on brightness,
+                # adding the coordinates for these bright pixels, and using them to calculate a more "accurate" size
+                # estimate.
+                c, figs, temp_masks = add_fluorescence_traces_c2_v1(temp_path=temp_base_path + temp_expt_path + filename_fl,
+                                                  temp_cells=c, frame_list=update_list[-1], current_frame=frame_num,
+                                                                    bkgd=bkgd_im, temp_bkgd=bkgd_im1)
+                # saving the figures in figs. This is only necessary if you want to track how good the segmentation is
+                # since it saves a separate image for each cell.
+                # for ind in range(len(figs)):
+                #     figs[ind].savefig(directory+'/images/cell_fluor_plots/scene{0}_frame_{1}_cell_{2}.png'.format(scene, frame_num, ind))
+                #     np.save(directory+'/images/cell_fluor_plots/scene{0}_frame_{1}_cell_{2}'.format(scene, frame_num, ind), temp_masks[ind])
+
+            filename_fl = temp_image_filename+temp_fl_filename + 's{0}_t{1}.TIF'.format(str(scene), str(frame_num))
             filename_fl_bkgd = temp_image_filename+temp_fl_filename + 's{0}_t{1}.TIF'.format(str(temp_bkgd_scene), str(frame_num))
             # format is z, y, x
             bkgd_im = io.imread(temp_base_path + temp_expt_path + filename_fl_bkgd)
@@ -909,14 +1072,16 @@ def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filen
             c, mask = add_fluorescence_traces_v2(temp_path=temp_base_path + temp_expt_path + filename_fl, temp_cells=c,
                                                    frame_list=update_list[-1],
                                                    current_frame=frame_num, z_scaling=z_scale, z_offset=z_offset,
-                                                   bkgd=bkgd_im1, save_coords=False)
+                                                   bkgd=bkgd_im1, save_coords=False, exists_c2=temp_fl_filename_c2)
             io.imsave(directory + '/images/mask3d_s{0}_t{1}.TIF'.format(str(scene), str(frame_num)), mask)
+
             print 'done scene {0}, frame {1}'.format(scene, frame_num)
         save_object(c, directory + '/cells_fl_scene_{0}.pkl'.format(scene))
 
 
 def populate_cells_all_scenes_2_v2(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename,
-                                temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_bkgd_details=None):
+                                temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_bkgd_details=None,
+                                   temp_sel_scenes=None):
     # This is the same as populate_cells_all_scenes_2 with the difference that it allows one to not have a separate
     # background frame, but to instead define a set of coordinates in a single scene to calculate the background from.
     # To do this, temp_bkgd_details should have the format [scene_num, [xmin, xmax], [ymin, ymax]]. This is only
@@ -927,7 +1092,11 @@ def populate_cells_all_scenes_2_v2(temp_base_path, temp_expt_path, temp_image_fi
 
     color_seq_val = plt.cm.tab10(np.linspace(0.0, 1.0, 11))
     generate_masks = True
-    for scene in range(1, temp_num_scenes):
+    for scene1 in range(1, temp_num_scenes):
+        if not(temp_sel_scenes is None):
+            scene = temp_sel_scenes[scene1-1]
+        else:
+            scene = scene1
         print 'scene = {0}'.format(scene)
         directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
         with open(directory + '/cells_scene_{0}.pkl'.format(scene), 'rb') as input:
@@ -1072,7 +1241,7 @@ def track_localization_manual_annotation(temp_base_path, temp_expt_path, temp_im
 
 def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename, temp_num_frames,
                               temp_analyzed_scene, temp_num_scenes, temp_threshold, temp_drange, temp_analyzed_frames,
-                              temp_label_path):
+                              temp_label_path, temp_sel_scenes=None):
     # temp_label_path determines whether we use the output from populate_cells_all_scenes_3 or 2.
     directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_analyzed_scene)
 
@@ -1195,7 +1364,11 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
     # Automatically classifying cells based on skewness cutoff
     automate_analysis = 1
     if automate_analysis:
-        for scene in range(1, temp_num_scenes):
+        for scene1 in range(1, temp_num_scenes):
+            if not(temp_sel_scenes is None):  # if we have only selected a certain number of scenes to look at here.
+                scene = temp_sel_scenes[scene1-1]
+            else:
+                scene = scene1
             print 'Working on Scene number {0}'.format(scene)
             directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
             if temp_label_path is None:  # in this case we didn't do the labeling since we don't have labels
@@ -1290,9 +1463,64 @@ def assign_troublesome_pair(temp_posn, temp_frame_num, temp_dir, temp_cell_num, 
     return temp_posn_partner
 
 
+def determine_mothers(temp_cells, temp_frame_num, temp_inds):
+    # This will take two cells, and assign mother vs daughter, preferentially using previously known lineage data but
+    # otherwise using size data. If both cells are known to be mother cells, we return an error.
+    temp_inds1 = None
+    temp_mother_vec = np.array([(len(temp_cells[temp_ind].daughters) > 0) for temp_ind in temp_inds])
+    if np.sum(temp_mother_vec) == 1:
+        temp_inds2 = [i for i, x in enumerate(temp_mother_vec) if x]
+        temp_inds1 = [temp_inds[temp_inds2[0]], temp_inds[temp_inds2[0]-1]]  # gives the index of mother first, then
+        # daughter
+    elif np.sum(temp_mother_vec) == 0:  # if no cells are mothers we report the mother as the larger of the two cells.
+        temp_val = [temp_cells[temp_inds[0]].ellipse_volume[temp_frame_num - temp_cells[temp_inds[0]].frames[0]],
+                    temp_cells[temp_inds[1]].ellipse_volume[temp_frame_num - temp_cells[temp_inds[1]].frames[0]]]
+        # print temp_val
+        m_ind = np.argmax(temp_val)
+        temp_inds1 = [temp_inds[m_ind], temp_inds[m_ind-1]] # gives the index of mother first, then
+        # daughter
+    if temp_inds1 is None:
+        print 'Tried to assign a mother-mother pairing at division in frame {0}'.format(temp_frame_num)
+    return temp_inds1
+
+
+def test_tree(temp_conn_mat, temp_assigned, temp_ind):
+    # classifies the branch and classification structure. temp_type = 0 must be added to pending_assignment, temp_type=1
+    # must be assigned to its pair, and temp_type=2 requires manual assignment
+    temp_sum = np.sum(temp_conn_mat[temp_ind, :], axis=0)
+    if temp_sum == 0:
+        temp_type = 0  # if there is no prospective pair
+    elif temp_sum == 1:
+        temp_ind1 = np.nonzero(temp_conn_mat[temp_ind, :])[0][0]
+        if not(temp_assigned[temp_ind1]):  # if the prospective pair cell has not been assigned yet
+            if np.sum(temp_conn_mat[temp_ind1, :])==1:
+                temp_type = 1  # if this is a regular tree with two pairs that are unassigned.
+            elif np.sum(temp_assigned[np.nonzero(temp_conn_mat[temp_ind1, :])]==0) == 1:  # if there is still only one
+                # unassigned pair for the pair then we treat this as normal.
+                temp_type = 1
+            else:
+                temp_type = 2  # if the other cell has more than one pair, and more than one is unassigned, then this
+                # needs to be manually assigned
+        else:  # if the prospective pair has already been assigned to another cell
+            temp_type = 0
+    elif temp_sum > 1:
+        if np.sum(temp_assigned[np.nonzero(temp_conn_mat[temp_ind, :])]==0) == 1:  # if there are multiple potential
+            # pairs but only one is unassigned
+            temp_type = -1  # in this case we need to select the pair as unassigned one.
+        elif np.sum(temp_assigned[np.nonzero(temp_conn_mat[temp_ind, :])]==0) > 1:
+            temp_type = 2  # if there is more than one prospective pair and more than one unassigned then this requires
+            # manual assignment
+        else:
+            temp_type = 0  # if there are no unassigned pairs then this should be flagged for appending to
+            # pending_assignment
+    return temp_type
+
+
 def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename, temp_num_frames,
-                              temp_analyzed_scene, temp_num_scenes, temp_threshold, temp_drange):
+                              temp_analyzed_scene, temp_num_scenes, temp_threshold, temp_drange,
+                    temp_manual_annotation):
     # This function takes as inputs the current cells with specified Whi5 localization, and assigns lineages
+    # temp_manual_annotation is a boolean value for whether this will involve you manually annotating these datasets.
     distance_cutoff = 40  # cutoff for centroid distance above which mother-daughter pairings cannot be assigned
     num_divisions = 0
     num_nuclear_events = 0
@@ -1301,6 +1529,7 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
         directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
         with open(directory + '/cells_scene_{0}_v2.pkl'.format(scene), 'rb') as input:
             c = pickle.load(input)
+        # cell_indices = [obj.index for obj in c]
         for obj in c:
             obj.daughters = []
             obj.parent = None
@@ -1316,7 +1545,8 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                 print 'Reached Scene {0}, frame {1}'.format(scene, frame_num)
 
             # Now we check which cells to analyze for each frame
-            assigned_inds = [[], []]
+            assigned_inds = [[], []]  # this will be used later to generate a figure showing the mother and daughter
+            # pairs for each cell type
             pending_assignment.append([])
             if frame_num > 1:
                 temp2 = [(frame_num in temp1) for temp1 in frame_list]
@@ -1329,8 +1559,9 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                 temp_started_G1 = [[], [], []]
                 for ind1 in update_list1:
                     temp_ind = frame_num - c[ind1].frames[0]  # cell age
-                    if temp_ind == 0:  # if this cell was segmented for the first time in this frame then we store that,
-                        # but we don't do much with it for now.
+                    if temp_ind == 0:  # if this cell was segmented for the first time in this frame then we don't use
+                        # that since erroneous classification happens quite a lot for very small cells due to poor
+                        # segmentation.
                         print 'Newborn cell {0} with nuclear Whi5 found in timepoint {1}'.format(c[ind1].index,
                                                                                                  frame_num)
                         temp_new[0].append(ind1)
@@ -1341,7 +1572,8 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                     elif c[ind1].nuclear_whi5[temp_ind - 1] == 0:
                         # if temp_ind-2==0 or c[ind1].nuclear_whi5[temp_ind-2] == 0:  # we require that either the cell only
                         # started being
-                        temp_started_G1[0].append(ind1)  # these are the cells we have to assign
+                        temp_started_G1[0].append(ind1)  # these are the cells we have to assign. Note this is the
+                        # index in c, NOT the unique cell identifier.
                         temp_started_G1[1].append(temp_ind)
                         temp_started_G1[2].append(c[ind1].position[temp_ind])
                         num_nuclear_events += 1
@@ -1352,175 +1584,143 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
                 temp_mothers = np.array([(len(c[temp_ind1].daughters) > 0) for temp_ind1 in temp_started_G1[0]])
                 # tracking whether these cells have already been mothers.
                 to_remove = [[], []]
-
+                assigned = np.zeros(len(temp_started_G1[0]))  # This will track whether a cell has already been assigned
+                # We use this to avoid multiple assignments
+                dist_mat = np.zeros([len(temp_started_G1[0]), len(temp_started_G1[0])]) # matrix of distances between cell
+                # i and j for dist_mat[i,j]
+                dist_mat += (distance_cutoff+1000.0)*np.identity(len(temp_started_G1[0]))  # prevent cells partnering
+                # themselves.
+                for ind1 in range(len(temp_started_G1[0])):
+                    for ind2 in range(len(temp_started_G1[0])):
+                        if ind1 != ind2: # prevent cells partnering themselves.
+                            dist_mat[ind1, ind2] = np.linalg.norm(temp_started_G1[2][ind1] - temp_started_G1[2][ind2])
+                conn_mat = dist_mat<distance_cutoff
                 # We now go through each cell in temp_started_G1 and see what other cell it is closest to.
                 for ind1 in range(len(temp_started_G1[0])):
-                    # evaluating distances between cells
-                    d = 1000 * np.ones(len(temp_started_G1[0]))
-                    for ind2 in range(len(temp_started_G1[0])):
-                        if ind1 != ind2:
-                            # print d, temp_started_G1
-                            d[ind2] = np.linalg.norm(temp_started_G1[2][ind1] - temp_started_G1[2][ind2])
-
-                    if temp_mothers[ind1]:  # if this cell is a mother then look within the cells which haven't
-                        # previously been classified as mothers.
-
-                        temp_inds = np.nonzero(temp_mothers == 0)
-                        temp_ind2 = np.argsort(
-                            d[temp_inds])  # ordering the indices of temp_inds based on their distance
-                        # print len(temp_inds), temp_ind2, temp_inds[0]
-                        if len(temp_inds[0]) > 0:
-                            if d[temp_inds[0][temp_ind2[0]]] < distance_cutoff:  # if the lowest distance is less than
-                                # the distance cutoff
-                                if sum(d[
-                                           temp_inds] < distance_cutoff) > 1:  # if there is another cell with low distance in
-                                    # the same frame then we neglect this for now. This should ideally be developed later
-                                    # with manual correction
-                                    # pending_assignment[-1].append(temp_started_G1[0][ind1])
-                                    # dir1 = temp_base_path + temp_expt_path
-                                    temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
-                                                    directory, temp_started_G1[0][ind1], scene)
-                                    # Calculating the distance from this point to each cell that started G1 this
-                                    # cell cycle
-                                    if not(temp_loc is None):
-                                        d1 = np.ones(len(temp_started_G1[0]))
-                                        for ind2 in range(len(temp_started_G1[0])):
-                                                d1[ind2] = np.linalg.norm(
-                                                    temp_started_G1[2][ind2] - temp_loc)
-                                        if np.amin(d1)<20 and np.amin(d1) in temp_inds[0]:
-                                            # if we can assign the point to a cell that has newly started G1
-                                            assigned_inds[0].append(temp_started_G1[0][ind1])
-                                            assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
-                                            c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
-                                                               daughter_ind=temp_started_G1[0][np.argmin(d1)],
-                                                               temp_frame_num=frame_num)
-                                            num_divisions += 1
-                                    else:
-                                        print 'Unable to assign a daughter in scene {0}, frame{1}, cell{2}'.format(
-                                            scene, frame_num, temp_started_G1[0][ind1])
-                                else:
-                                    assigned_inds[0].append(temp_started_G1[0][ind1])
-                                    assigned_inds[1].append(temp_started_G1[0][temp_inds[0][temp_ind2[0]]])
-                                    c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
-                                                         daughter_ind=temp_started_G1[0][temp_inds[0][temp_ind2[0]]],
-                                                         temp_frame_num=frame_num)
-                                    num_divisions += 1
-                        else:
-                            pending_assignment[-1].append(temp_started_G1[0][ind1])  # if we can't assign this well,
-                            # then we will revisit it in the next timeframe
-                    else:
-                        temp_ind2 = np.argsort(d)
-                        if d[temp_ind2[0]] < distance_cutoff:
-                            if sum(d < distance_cutoff) > 1:  # As above for the case of cells which we know to be
-                                # mothers, if there is another cell with low distance in
-                                # the same frame then we neglect this for now. This should ideally be developed later
-                                # with manual correction
-                                # pending_assignment[-1].append(temp_started_G1[0][ind1])
-                                temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
-                                                                   directory, temp_started_G1[0][ind1], scene)
-                                # Calculating the distance from this point to each cell that started G1 this
-                                # cell cycle
-                                if not (temp_loc is None):
-                                    d1 = np.ones(len(temp_started_G1[0]))
-                                    for ind2 in range(len(temp_started_G1[0])):
-                                        d1[ind2] = np.linalg.norm(
-                                            temp_started_G1[2][ind2] - temp_loc)
-                                    if np.amin(d1) < 20:
-                                        # if we can assign the point to a cell that has newly started G1
-                                        assigned_inds[0].append(temp_started_G1[0][ind1])
-                                        assigned_inds[1].append(temp_started_G1[0][np.argmin(d1)])
-                                        c = assign_md_pair(c, mother_ind=temp_started_G1[0][ind1],
-                                                           daughter_ind=temp_started_G1[0][np.argmin(d1)],
-                                                           temp_frame_num=frame_num)
-                                        num_divisions += 1
-                                else:
-                                    print 'Unable to assign a daughter in scene {0}, frame {1}, cell {2}'.format(
-                                        scene, frame_num, temp_started_G1[0][ind1])
-                            else:  # we add a new pair
-                                temp_inds1 = [temp_started_G1[0][ind1], temp_started_G1[0][temp_ind2[0]]]
-                                # print temp_inds1
-                                temp_val = [c[temp_inds1[0]].ellipse_volume[frame_num - c[temp_inds1[0]].frames[0]],
-                                            c[temp_inds1[1]].ellipse_volume[frame_num - c[temp_inds1[1]].frames[0]]]
-                                # print temp_val
-                                m_ind = np.argmax(temp_val)
-                                # find which is the mother cell based on which has the larger cell size.
-                                assigned_inds[0].append(temp_inds1[m_ind])
-                                assigned_inds[1].append(temp_inds1[m_ind - 1])
-                                c = assign_md_pair(c, mother_ind=temp_inds1[m_ind],
-                                                     daughter_ind=temp_inds1[m_ind - 1],
-                                                     temp_frame_num=frame_num)
+                    if not(assigned[ind1]):  # if the current cell has not already been assigned
+                        # evaluating the number of candidate partners this cell has
+                        is_pair = test_tree(dist_mat < distance_cutoff, assigned, ind1)
+                        if is_pair == 1:  # this is the regular case
+                            temp_ind1 = np.nonzero(conn_mat[ind1, :])[0][0]
+                            inds1 = determine_mothers(c, frame_num,
+                                                      [temp_started_G1[0][ind1], temp_started_G1[0][temp_ind1]])
+                            if not(inds1 is None):  # if there wasn't a problem in assigning mother vs daughter
+                                assigned_inds[0].append(inds1[0])
+                                assigned_inds[1].append(inds1[1])
+                                c = assign_md_pair(c, mother_ind=inds1[0],
+                                                   daughter_ind=inds1[1],
+                                                   temp_frame_num=frame_num)
+                                assigned[ind1] = 1
+                                assigned[temp_ind1] = 1
                                 num_divisions += 1
-                        else:
-                            pending_assignment[-1].append(temp_started_G1[0][ind1])  # if we can't assign this well,
-                            # then we will plan to revisit it in the next timeframe
-
-                    # we take any cell that is pending assignment in the current frame, and compare to the previous frame to
-                    # see if there is an appropriate assignment there.
-                    for i0 in range(len(pending_assignment[-1])):
-                        coord1 = c[pending_assignment[-1][i0]].position[
-                            frame_num - c[pending_assignment[-1][i0]].frames[0]]
-                        d = []
-                        for i1 in range(len(pending_assignment[-2])):
-                            if frame_num in c[pending_assignment[-2][i1]].frames:  # if the cell in the previous timept
-                                # still exists in the current one we can assign it
-                                # compare the positions in the current frame and the previous frame
-                                coord2 = c[pending_assignment[-2][i1]].position[frame_num - 1 -
-                                                                                c[pending_assignment[-2][i1]].frames[0]]
-                                d.append(np.linalg.norm(coord1 - coord2))
-                            else:
-                                d.append(distance_cutoff+1000)  # we will not risk assigning this lineage since the cell
-                                # stopped being tracked in the current timepoint.
-                        temp_ind2 = np.argsort(d)
-                        if len(temp_ind2) != 0:
-                            if d[temp_ind2[0]] < distance_cutoff:
-                                if len(d) > 1:
-                                    # print d, np.asarray(d) < distance_cutoff
-                                    if sum(np.asarray(d) < distance_cutoff) == 1:
-                                        temp_inds1 = [pending_assignment[-1][i0], pending_assignment[-2][temp_ind2[0]]]
-                                        # print temp_inds1
-                                        temp_val = [
-                                            c[temp_inds1[0]].ellipse_volume[frame_num - c[temp_inds1[0]].frames[0]],
-                                            c[temp_inds1[1]].ellipse_volume[frame_num - 1 - c[temp_inds1[1]].frames[0]]]
-                                        m_ind = np.argmax(temp_val)
-                                        # find which is the mother cell based on which has the larger cell size.
-                                        assigned_inds[0].append(temp_inds1[m_ind])
-                                        assigned_inds[1].append(temp_inds1[m_ind - 1])
-                                        c = assign_md_pair(c, mother_ind=temp_inds1[m_ind],
-                                                             daughter_ind=temp_inds1[m_ind - 1],
-                                                             temp_frame_num=frame_num - 1)
-                                        num_divisions += 2
-                                        # we assign these cells as both being present in the previous frame, since that's when
-                                        # the nuclear localization event must have occurred for both
-                                        to_remove[0].append(pending_assignment[-1][i0])
-                                        to_remove[1].append(pending_assignment[-2][temp_ind2[0]])
-                                else:
-                                    temp_inds1 = [pending_assignment[-1][i0], pending_assignment[-2][temp_ind2[0]]]
-                                    # print temp_inds1
-                                    temp_val = [c[temp_inds1[0]].ellipse_volume[frame_num - c[temp_inds1[0]].frames[0]],
-                                                c[temp_inds1[1]].ellipse_volume[
-                                                    frame_num - 1 - c[temp_inds1[1]].frames[0]]]
-                                    m_ind = np.argmax(temp_val)
-                                    # find which is the mother cell based on which has the larger cell size.
-                                    assigned_inds[0].append(temp_inds1[m_ind])
-                                    assigned_inds[1].append(temp_inds1[m_ind - 1])
-                                    c = assign_md_pair(c, mother_ind=temp_inds1[m_ind],
-                                                         daughter_ind=temp_inds1[m_ind - 1],
-                                                         temp_frame_num=frame_num - 1)
+                        elif is_pair == 2 and temp_manual_annotation:
+                            # If the pairing is ambiguous and this cell has not already been assigned then we have to
+                            # manually assign this.
+                            temp_loc = assign_troublesome_pair(temp_started_G1[2][ind1], frame_num,
+                                                               directory, temp_started_G1[0][ind1], scene)
+                            if not (temp_loc is None):  # if we were able to find a candidate
+                                # first we search for this within the list of cells for which Whi5 has just entered the
+                                # nucleus
+                                d1 = np.ones(len(temp_started_G1[0]))
+                                for ind2 in range(len(temp_started_G1[0])):
+                                    d1[ind2] = np.linalg.norm(
+                                        temp_started_G1[2][ind2] - temp_loc)
+                                if np.amin(d1) < 20 and conn_mat[ind1, np.argmin(d1)]:
+                                    # if we can assign the point to a cell that has newly started G1 and this selected
+                                    # cell is sufficiently close to our cell in question
+                                    inds1 = determine_mothers(c, frame_num,
+                                                              [temp_started_G1[0][ind1], temp_started_G1[0][np.argmin(d1)]])
+                                    if not inds1 is None: # if there was no problem with assignment mother vs. daughter
+                                        assigned_inds[0].append(inds1[0])
+                                        assigned_inds[1].append(inds1[1])
+                                        c = assign_md_pair(c, mother_ind=inds1[0],
+                                                           daughter_ind=inds1[1],
+                                                           temp_frame_num=frame_num)
+                                        # tracking that these cells have been assigned
+                                        assigned[ind1]=1
+                                        assigned[np.argmin(d1)]=1
+                                        num_divisions += 1
+                            else:  # if we can't find a pair in the newly G1 population we simply add the current
+                                # cell to pending_assignment
+                                print 'Unable to assign a pair in scene {0}, frame {1}, cell {2}'.format(
+                                    scene, frame_num, temp_started_G1[0][ind1])
+                                pending_assignment[-1].append(
+                                    temp_started_G1[0][ind1])  # if we can't assign this well, we compare it to
+                                # the previous timepoint and the following one.
+                        elif is_pair == -1:  # in this case, the cell has multiple potential partners, but only one is
+                            # unassigned. We therefore can assign the cell the unassigned potential partner.
+                            temp_num = np.nonzero(assigned[np.nonzero(conn_mat[ind1,:])]==0)  # the index in nonzero ent
+                            # of conn_mat in which the cell has not been assigned yet
+                            ind2 = np.nonzero(conn_mat[ind1,:])[0][temp_num][0]  # gives the index in "assigned" of the
+                            # pair
+                            inds1 = determine_mothers(c, frame_num,
+                                                      [temp_started_G1[0][ind1], temp_started_G1[0][ind2]])
+                            if not inds1 is None:  # if there was no problem with assignment mother vs. daughter
+                                assigned_inds[0].append(inds1[0])
+                                assigned_inds[1].append(inds1[1])
+                                c = assign_md_pair(c, mother_ind=inds1[0],
+                                                   daughter_ind=inds1[1],
+                                                   temp_frame_num=frame_num)
+                                # tracking that these cells have been assigned
+                                assigned[ind1] = 1
+                                assigned[ind2] = 1
+                                num_divisions += 1
+                        elif is_pair == 0:
+                            pending_assignment[-1].append(temp_started_G1[0][ind1])  # if we can't assign this well, we compare it to
+                                    # the previous timepoint and the following one
+                            print 'Unable to assign a pair in scene {0}, frame {1}, cell {2}'.format(
+                                scene, frame_num, temp_started_G1[0][ind1])
+                # we take any cell that is pending assignment in the current frame, and compare to the previous frame to
+                # see if there is an appropriate assignment there.
+                dist_mat = (distance_cutoff+1000.0)*np.ones([len(pending_assignment[-1]), len(pending_assignment[-2])])
+                # note that here we should never have the same cell appear in subsequent timesteps since we only append
+                # cells to this vector that are tracked as having had Whi5 not in the nucleus in the nucleus in the prev
+                # timestep. I.e. if it is in pending_assignment[-2] it cannot be in pending_assignment[-1].
+                for i0 in range(len(pending_assignment[-1])):
+                    coord1 = c[pending_assignment[-1][i0]].position[
+                        frame_num - c[pending_assignment[-1][i0]].frames[0]]
+                    for i1 in range(len(pending_assignment[-2])):
+                        if frame_num in c[pending_assignment[-2][i1]].frames:  # if the cell in the previous timept
+                            # still exists in the current one we can assign it
+                            # compare the positions in the current frame and the previous frame
+                            coord2 = c[pending_assignment[-2][i1]].position[frame_num - 1 -
+                                                                            c[pending_assignment[-2][i1]].frames[0]]
+                            dist_mat[i0, i1]=np.linalg.norm(coord1 - coord2)
+                conn_mat = dist_mat < distance_cutoff
+                assigned = [np.zeros(conn_mat.shape[0]), np.zeros(conn_mat.shape[1])]
+                for i0 in range(len(pending_assignment[-1])):
+                    if not(assigned[0][i0]):  #  if the cell has not already been assigned
+                        if np.sum(conn_mat[i0,:])==1:  # if the current cell has only one potential pair
+                            i1 = np.nonzero(conn_mat[i0,:])[0][0]  # index of the paired cell in pending_assignment[-2]
+                            if np.sum(conn_mat[:, i1])==1 and not(assigned[1][i1]):  # if the potential pair has only
+                                # one potential pair and is not already assigned (similar to is_pair==1 above).
+                                inds1 = determine_mothers(c, frame_num,
+                                                          [pending_assignment[-1][i0], pending_assignment[-2][i1]])
+                                if not inds1 is None:  # if there was no problem with assignment mother vs. daughter
+                                    assigned_inds[0].append(inds1[0])
+                                    assigned_inds[1].append(inds1[1])
+                                    c = assign_md_pair(c, mother_ind=inds1[0],
+                                                       daughter_ind=inds1[1],
+                                                       temp_frame_num=frame_num-1)
+                                    # we assign these cells paired in the previous frame, since that's when
+                                    # the nuclear localization event must have occurred for both. However, they will appear
+                                    # in the output images as being tracked in the current frame.
+                                    assigned[0][i0] = 1
+                                    assigned[1][i1] = 1
                                     num_divisions += 2
-                                    # we assign these cells as both being present in the previous frame, since that's when
-                                    # the nuclear localization event must have occurred for both. They will appear in the
-                                    # output images as being tracked in the current frame.
                                     to_remove[0].append(pending_assignment[-1][i0])
-                                    to_remove[1].append(pending_assignment[-2][temp_ind2[0]])
-                                    # removing the newly tracked items from pending_assignment. Cells from the previous timestep will still
-                                    # appear as not being tracked in the previous frame.
+                                    to_remove[1].append(pending_assignment[-2][i1])
+                                    print 'Assigned M {0}, D {1} in frame {2}'.format(inds1[0], inds1[1], frame_num)
+                                    # removing the newly tracked items from pending_assignment. Cells from the previous
+                                    # timestep will still appear as not being tracked in the previous frame.
+                # removing the assigned cells from the pending_assignment list
                 pending_assignment[-1] = list(set(pending_assignment[-1]) - set(to_remove[0]))
                 pending_assignment[-2] = list(set(pending_assignment[-2]) - set(to_remove[1]))
+
+            ######################## Producing a figure to track the results so far
             # producing a figure to track the result of this so far.
-            # if frame_num ==50 and scene==4:
-            #     for ind1 in assigned_inds[1]:
-            #         print ind1, len(c[ind1].position), frame_num-c[ind1].frames[0], c[ind1].nuclear_whi5
-            #         print c[ind1].position
+            # Note that the "bad cells" shown in red will only be listed for the cells that have not been assigned
+            # retroactively
             temp_im = io.imread(
                 temp_base_path + temp_expt_path + temp_image_filename+temp_fl_filename+
                 's{0}_t{1}.TIF'.format(str(scene), str(frame_num))) / temp_drange
@@ -1565,7 +1765,7 @@ def assign_lineages(temp_base_path, temp_expt_path, temp_image_filename, temp_fl
 def create_cycles_full(temp_base_path, temp_expt_path, temp_num_scenes):
     # This function takes the output from assign_lineages and creates individual cell cycles from that
     cc = []
-    ind = 0  # this indexes the cell we are considering in the current timestep
+    ind = 0  # this indexes the cell cycles we are generating.
     # this will be repeated with each new iteration
 
     for scene in range(1, temp_num_scenes):
@@ -1575,12 +1775,13 @@ def create_cycles_full(temp_base_path, temp_expt_path, temp_num_scenes):
         with open(directory + '/cells_scene_{0}_v3.pkl'.format(scene), 'rb') as input:
             c = pickle.load(input)
         for i0 in range(len(c)):
-            if not(i0 == c[i0].index):
-                raise ValueError('Cell indexing distinct from cell list indexing')
-            else:
-                c, cc, ind = create_cycles(c, i0, cc, ind,
-                                             temp_data_origin=data_index)  # note that the unique index for each
-            # cell cycle is unique across scenes also, but that the
+            # if not(i0 == c[i0].index-1):
+            #     print 'Cell indexing error in list number {0}, index number {1}'.format(i0, c[i0].index)
+            #     raise ValueError('Cell indexing distinct from cell list indexing')
+            # else:
+            c, cc, ind = create_cycles(c, i0, cc, ind,
+                                         temp_data_origin=data_index)  # note that the unique index for each
+            # cell cycle is unique across scenes also
         for i0 in range(len(c)):
             c, cc = stitch_cycles(c, cc, i0)
         print len(cc)
@@ -1620,7 +1821,7 @@ def study_cell(temp_cell):
 
 def validate_cycles(temp_base_path, temp_expt_path, temp_image_filename, temp_bf_filename, temp_num_frames,
                               temp_num_scenes):
-    with open(temp_base_path+temp_expt_path+ '/cell_cycles_compiled.pkl', 'rb') as input:
+    with open(temp_base_path+temp_expt_path+ '/cell_cycles_filtered.pkl', 'rb') as input:
         temp_cycles = pickle.load(input)
     filt_cc = [obj for obj in temp_cycles if obj.complete and not (obj.error) and not (obj.daughter is None)]
     for scene in range(1, temp_num_scenes):
@@ -1666,10 +1867,14 @@ def validate_cycles(temp_base_path, temp_expt_path, temp_image_filename, temp_bf
 
 
 def label_boundaries(temp_base_path, temp_expt_path, temp_image_filename, temp_bf_filename, temp_num_scenes,
-                     temp_num_frames):
+                     temp_num_frames, temp_sel_scenes=None):
     cells = []
     bdys = set([0, 511])
-    for scene in range(1, temp_num_scenes):
+    for scene1 in range(1, temp_num_scenes):
+        if not(temp_sel_scenes is None):
+            scene = temp_sel_scenes[scene1-1]
+        else:
+            scene = scene1
         with open(temp_base_path+temp_expt_path + '/scene_{0}/outputs/cells_fl_scene_{0}.pkl'.format(scene), 'rb') as input:
             temp_cells = pickle.load(input)
         for obj in temp_cells:
@@ -1686,3 +1891,49 @@ def label_boundaries(temp_base_path, temp_expt_path, temp_image_filename, temp_b
                     obj.edge_cell = True  # record this for the cell
         cells += temp_cells
     save_object(cells, temp_base_path+temp_expt_path + '/cells_compiled.pkl')
+
+
+def filter_cycles(temp_base_path, temp_expt_path, temp_scale, temp_size_thresh=None):
+    # temp_height is 3.5um for haploid cell_asics plates, 5.0 for diploid
+    # temp_scale is the pixel size in the XY plane
+    # determining whether that cycle shows connection with the image boundary
+    bdys = set([0, 511])
+    with open(temp_base_path+temp_expt_path+ '/cell_cycles_compiled.pkl', 'rb') as input:
+        temp_cycles = pickle.load(input)
+    temp_cycles1 = []
+    temp_areas = np.array([obj.segment_coords[-1].shape[0] for obj in temp_cycles])
+    for obj in temp_cycles:
+        obj.edge_cycle = False
+        obj.pancake = False
+        for i1 in range(len(obj.segment_coords)):
+            temp_coords = obj.segment_coords[i1]
+            if not (
+                obj.daughter is None) and obj.complete:  # this cell cycle should have been captured for the full time
+                if not (obj.bud_seg[i1] is None):
+                    # print 'hi'
+                    # print temp_coords.shape, obj.bud_seg[i1]
+                    temp_coords = np.concatenate((temp_coords, obj.bud_seg[i1]), axis=0)  # if this cell has a bud we
+                    # append the segment coordinates of the bud to this area so that we flag that too.
+            for i0 in range(2):
+                if bdys.intersection(zip(*temp_coords)[i0]):
+                    obj.edge_cycle = True  # recording that this cell cycle was segmented with a connection to the image
+                    # boundary
+    # determining whether that cell is too big for it to fit without being squashed
+
+    if not (temp_size_thresh is None):
+        temp_thresh = np.mean(temp_areas)+1.5*np.std(temp_areas)  # 1.5 sd above mean area at division.
+        # temp_thresh = math.pi*(50.0*temp_height/(2*temp_scale))**2  # the area of a circle that is too big to fit
+        # properly in 3D (in units of pixels squared). Note this is difficult to calibrate.
+        for obj in temp_cycles:
+
+            for temp_coords in obj.segment_coords:
+                if temp_coords.shape[0]>temp_thresh:  # the length of temp_coords corresponds to the area in units of
+                    # pixels squared
+                    obj.pancake=True  # in this case we now know not to trust this cell cycle.
+    for obj in temp_cycles:
+        if not(obj.edge_cycle) and not(obj.pancake) and obj.complete and not(obj.error) and not(obj.daughter is None):
+            # if this is a high quality cell cycle
+            temp_cycles1.append(obj)
+    save_object(temp_cycles1, temp_base_path+temp_expt_path + '/cell_cycles_filtered.pkl')
+    print 'Number of high quality cell cycles: {0}'.format(len(temp_cycles1))
+    return temp_cycles1
