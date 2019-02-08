@@ -15,8 +15,8 @@ import os
 #                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
 # label_path = '/180725_timelapse/initial_dyed_test'
 # num_scenes = 11  # num_scenes should be the number of scenes to analyze + 1
-# num_frames = 41*np.ones(num_scenes, dtype=int)  # num_frames should be the number of frames + 1. Default is the same for
-# # each field of view.
+# num_frames = 41*np.ones(num_scenes, dtype=int)  # num_frames should be the number of frames + 1. Default is the same
+# # for each field of view.
 # bkgd_scene = num_scenes  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
 # analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
 # threshold=10000  # this is the threshold we use to decide whether to plot the log or linear version of the image
@@ -147,12 +147,12 @@ import os
 # tstep = 10.0
 
 
-# yFB79 expt 181207
+# yFB79 expt 181207 machine learning test
 
-expt_id = '/181207_yFB79_60X_Raff_125uMGal'
+expt_id = '/181207_yFB79_60X_Raff_125uMGal_ML_test'
 pixel_size = {'60X': 0.267, '100X': 0.16}
 scale = pixel_size['60X']
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal/timelapse'
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal_ML_test/timelapse'
 image_filename, bf_filename, fl_filename = '/181207_yFB79_60X_Raff_125uMGal_', \
                                            'w1Brightfield confocal_', \
                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
@@ -163,6 +163,7 @@ manual_annotation = False  # if manual_annotation then we will use manual annota
 num_scenes = 15  # num_scenes should be the number of scenes to analyze + 1
 # num_frames = np.asarray([66, 66, 66, 60, 65, 56, 56, 62, 62, 56, 56, 56])
 num_frames = np.asarray([45, 55, 61, 56, 61, 61, 61, 56, 61, 51, 51, 51, 61, 61])
+print np.sum(num_frames)
 # num_frames should be the number of frames + 1. Default is the same for
 # each field of view.
 num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
@@ -178,7 +179,7 @@ tstep = 10.0
 
 def onclick(event):
     ix, iy = event.xdata, event.ydata
-    print 'x = %d, y = %d'%(
+    print 'x = %d, y = %d' % (
         ix, iy)
     x_pts.append(ix)
     y_pts.append(iy)
@@ -203,11 +204,10 @@ def keypress(event):
         if not os.path.exists(directory+'/fl_loc_centres'):
             os.makedirs(directory+'/fl_loc_centres')
         x_vals, y_vals = zip(*coords)
-        temp = np.zeros([len(x_vals),2])
+        temp = np.zeros([len(x_vals), 2])
         temp[:, 0] = x_vals[:]
         temp[:, 1] = y_vals[:]
         np.save(directory+'/fl_loc_centres/'+'scene_{0}_frame_{1}'.format(scene, frame_num), temp)
-        print 'completed scene {0}, frame {1}, coordinates:'.format(scene, frame_num), temp
     elif val == 'b':
         temp = coords.pop()
         x_pts.pop()
@@ -216,6 +216,9 @@ def keypress(event):
         line.set_ydatba(y_pts)
         fig.canvas.draw()
         print temp
+    elif val == 'q':  # if we want to quit the analysis partway through
+        print('Exiting')
+        exit()
     # elif val == 'b':
     #     temp = coords.pop()
     #     x_pts.pop()
@@ -229,34 +232,56 @@ def keypress(event):
 
 
 coords = []
-global ax, temp_im, fig, scene, x_pts, y_pts, directory, frame_num
-scene = analyzed_scene  # we want to get data for the first scene
-directory = base_path+expt_path+'/scene_{0}/outputs'.format(scene)
-outlines = np.load(directory+'/cell_outlines_scene_{0}.npy'.format(scene))
+global ax, temp_im, fig, scene, x_pts, y_pts, directory, frame_num, directory1, coord_vals, temp_scenes1, temp_scenes
+# scene = analyzed_scene  # we want to get data for the first scene
+directory = base_path+expt_path+'/whi5_analysis'
+if not os.path.exists(directory):
+    os.makedirs(directory)
+# selecting randomly which images we will consider from which scenes
+if os.path.exists(directory+'/samples.npy'):  # we pick up based on what has been done already
+    temp_scenes = np.load(directory+'/samples.npy').tolist()
+    temp_scenes1 = np.load(directory+'/completed_samples.npy')
+    coord_vals = np.load(directory + '/fl_loc_cells.npy')
+    if len(temp_scenes) > num_frames_analyzed:
+        raise ValueError('Cannot proceed since you are trying to analyze fewer frames than have already been analyzed')
+else:
+    temp_scenes = []
+    temp_scenes1 = np.zeros(num_frames_analyzed)
+    coord_vals = np.zeros([0,3])
+temp_new = np.random.randint(low=0, high=np.sum(num_frames)+1, size=1)  # randomly selecting which scenes we consider
+while len(temp_scenes) < num_frames_analyzed:  # we
+    if not(temp_new[0] in temp_scenes):  # making sure we don't have any repeats
+        temp_scenes.append(temp_new[0])
+    temp_new = np.random.randint(low=0, high=np.sum(num_frames)+1, size=1)
 coord_list = []
-# for frame_num in range(1, num_frames[scene-1]):
-#     coord_list.append([])
-# print np.amax(outlines)
-# exit()
-print 'Keep going until frame number', num_frames_analyzed
-for frame_num in range(1, num_frames_analyzed):
+indexing = [int(np.sum(num_frames[:i0])) for i0 in range(0,len(num_frames))]
+print 'Keep going until scene number', num_frames_analyzed
+i0 = 0
+if np.sum(temp_scenes1 == 0) == 0:
+    i1 = num_frames_analyzed # in this case we have nothing left to do
+    print 'All frames already analyzed'
+    exit()
+else:
+    i1 = np.nonzero(temp_scenes1 == 0)[0][0]
+    i0 = i1  # so that we start from this scene
+for temp_ind in temp_scenes[i1:]:
+    # picking which scene and frame we are considering here
+    scene = np.searchsorted(indexing, temp_ind, side='right')
+    frame_num = temp_ind - indexing[scene-1] + 1
+    directory1 = base_path+expt_path+'/scene_{0}/outputs'.format(scene)
+    print 'Scene {0}, frame {1}'.format(scene, frame_num)
+    outlines = np.load(directory1+'/cell_outlines_scene_{0}.npy'.format(scene))
     temp_im = io.imread(base_path+expt_path+image_filename+fl_filename+
                         's{0}_t{1}.TIF'.format(str(scene), str(frame_num)))
-    temp_im1=temp_im/drange
-    # print temp_im.dtype
-    # exit()
-    # temp_mask = np.amax(temp_im,axis=0)  # this will be the threshold to filter out random maxed out pixels
-    # temp_im = np.amax(temp_im, axis=0)
-    if np.sum(temp_im>threshold)>0:
+    temp_im1 = temp_im/drange
+    if np.sum(temp_im > threshold) > 0:
         temp_im1 = np.log(np.amax(temp_im1, axis=0)/np.amax(temp_im1))
         # using a log scale in this case because this image contains the frustrating high energy pixels that sometimes
-        # crop up
+        # arise
     else:
         temp_im1 = np.amax(temp_im1, axis=0) / np.amax(temp_im1)
-    # print np.amax(temp_im1)
-    # exit()
-    temp_im1*= outlines[frame_num-1, :, :]==0
-    temp_im1+= outlines[frame_num-1, :, :].astype('uint16')
+    temp_im1 *= outlines[frame_num-1, :, :] == 0
+    temp_im1 += outlines[frame_num-1, :, :].astype('uint16')
     coords = []
     # filename = '/scene_{0}/outputs/images/frame_{1}.tif'.format(scene, frame)
     # temp_im = io.imread(base_path+expt_path+filename)
@@ -275,19 +300,22 @@ for frame_num in range(1, num_frames_analyzed):
     plt.show(fig)
     # print 'completed scene {0}, frame {1}, coordinates:'.format(scene, frame_num), coords
     coord_list.append(coords)
-coord_vals = np.zeros([sum([len(obj) for obj in coord_list]), 3])
-ind = 0
-ind1 = 1
-print coord_list
-for obj in coord_list:
-    print 'here'
-    print obj
-    if len(obj)>0:  # if we were unable to find any values in this frame then there should be nothing to unpack
-        x,y = zip(*obj)
-        coord_vals[ind:ind + len(obj), 0] = ind1
-        coord_vals[ind:ind + len(obj), 1] = x[:]
-        coord_vals[ind:ind + len(obj), 2] = y[:]
-    ind1 += 1
-    ind += len(obj)
-print len(coord_list), sum([len(obj) for obj in coord_list]), coord_vals
-np.save(directory+'/fl_loc_cells_scene_{0}.npy'.format(scene), coord_vals)
+    # we now updated coord_vals each time, so that we can have a command leading us to quit the segmentation.
+    coord_vals1 = np.zeros([len(coords), 3])
+    if len(coords) > 0:  # if we were unable to find any values in this frame then there should be nothing to unpack
+        x, y = zip(*coords)
+        coord_vals1[:, 0] = i0+1
+        coord_vals1[:, 1] = x[:]
+        coord_vals1[:, 2] = y[:]
+    coord_vals = np.concatenate((coord_vals, coord_vals1), axis=0)
+    temp_scenes1[i0] = 1  # indicating that we have completed that scene
+    print 'completed scene {0}, frame {1}, coordinates:'.format(scene, frame_num)
+    print 'Done {0} out of {1}'.format(i0, num_frames_analyzed)
+    i0 += 1  # to track the next scene
+    np.save(directory + '/fl_loc_cells.npy', coord_vals)
+    np.save(directory + '/completed_samples.npy', temp_scenes1)
+    np.save(directory + '/samples.npy', temp_scenes)
+print(len(coord_list), sum([len(obj) for obj in coord_list]), coord_vals)
+np.save(directory+'/samples.npy', temp_scenes)
+np.save(directory+'/fl_loc_cells.npy', coord_vals)
+np.save(directory+'/completed_samples.npy', temp_scenes1)

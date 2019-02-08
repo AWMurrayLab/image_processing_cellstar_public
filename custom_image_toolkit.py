@@ -19,6 +19,7 @@ from matplotlib import cm
 
 # helper
 
+
 class Cell(object):
     cellCount = 0  # total number of cells
 
@@ -34,8 +35,10 @@ class Cell(object):
         self.area = [birth_parameters['2d_area']]
         self.nuclear_whi5 = [0]  # we will change this later depending on fluorescence data
         self.type = -1  # if cells are undetermined we label them a -1
-        self.fluor_vals = [0]  # list of fluorescence values at each timepoint.
-        self.segment_coords = [birth_parameters['segment_coords']]
+        self.fluor_skew = [0]  # fluorescence skewness at each time point
+        self.fluor_cv = [0]  # fluorescence cv at each time point
+        self.fluor_gini = [0]  # fluorescence gini coefficient at each time point
+        self.segment_coords = [birth_parameters['segment_coords']]  # in format (y, x)  (row, col)
         self.zproj_fluor_vals = [0]
         self.zproj_fluor_vals_c2 = [0]
         # if
@@ -54,13 +57,15 @@ class Cell(object):
         self.ellipse_volume.append(frame_parameters['ellipse_volume'])
         self.area.append(frame_parameters['2d_area'])
         self.nuclear_whi5.append(0)
-        self.fluor_vals.append(0)
+        self.fluor_skew.append(0)
+        self.fluor_cv.append(0)
+        self.fluor_gini.append(0)
         self.zproj_fluor_vals.append(0)
         self.zproj_fluor_vals_c2.append(0)
         self.segment_coords.append(frame_parameters['segment_coords'])
 
     def add_fluor_placeholders(self):
-        self.int_fl = []
+        # self.int_fl = [] # deprecated
         self.coords = []
         self.pixel_thresh_coords = []
         self.pixel_thresh_fluor_vals_c2 = []
@@ -84,7 +89,7 @@ class CellCycle(object):
         self.complete = temp_parameters['complete']  # whether this corresponds to a full cell cycle or not
         self.frames = [temp_cell.frames[temp_ind] for temp_ind in temp_parameters['range']]
         self.ellipse_volume = [temp_cell.ellipse_volume[temp_ind] for temp_ind in temp_parameters['range']]
-        self.int_fl = [temp_cell.int_fl[temp_ind] for temp_ind in temp_parameters['range']]
+        # self.int_fl = [temp_cell.int_fl[temp_ind] for temp_ind in temp_parameters['range']] # deprecated
         self.ellipse_fit = [temp_cell.ellipse_fit[temp_ind] for temp_ind in temp_parameters['range']]  # major, minor, orientation, centroid
         self.data_origin = temp_parameters['data_origin']
         self.label_type = temp_cell.type
@@ -162,8 +167,7 @@ def single_frame(temp_path, temp_cells, temp_frame, tracking_csv, color_seq):
         # print i0
         temp2 = temp_im == i0  # go through sequentially
         # calculating ellipse behavior
-        temp_val = fit_ellipse(temp2.astype(int))\
-
+        temp_val = fit_ellipse(temp2.astype(int))
         temp_coords.append(temp_val[4])
         # print temp_coords[-1]
         # plt.plot(, color=(1.0, 1.0, 1.0, 1.0))
@@ -226,164 +230,133 @@ def single_frame(temp_path, temp_cells, temp_frame, tracking_csv, color_seq):
     return temp_cells, ax, fig, temp_outlines
 
 
-def add_fluorescence_traces_v0(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd):
-    # z_scaling gives the ratio of the z stepsize in um to the x,y pixel size in um.
-    temp_im = io.imread(temp_path)-bkgd  # subtracting the average background at each xy point
-    print temp_im.shape
-    for temp_ind in frame_list:
-        i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
-        if current_frame!=temp_cells[temp_ind].frames[i0]:
-            print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
-            raise ValueError('Wrong frame selected')
-        # gives the index for the current frame in that cell's history
-        temp_vals = temp_cells[temp_ind].ellipse_fit[i0]
-        temp_centre = np.array([temp_vals[3][1], temp_vals[3][0], temp_im.shape[2]/2+1+z_offset])  # reversed from centroid to
-        # give x, y, z here. z_offset accounts for the shift in focal plane of brightfield image relative to the
-        # ideal focal plane.
-        temp_scale = np.array([temp_vals[0], temp_vals[1], temp_vals[1]/z_scaling])
-        Z, Y, X = np.meshgrid(range(0,temp_im.shape[0]), range(temp_im.shape[1]), range(temp_im.shape[2]))
-        xlist, ylist, zlist = X.ravel(), Y.ravel(), Z.ravel()
-        coord_scaled = zip(xlist, ylist, zlist)
-        temp_mat = rotation_3d(-temp_vals[2])  # inverse rotation about Z axis to determine viable points
-        print 'I got here'
-        temp_coords = [np.linalg.norm((np.dot(temp_mat, (a - temp_centre))/temp_scale)) for a in coord_scaled]
-        print 'I got further'
-        # confirming that these points sit within the volume defined by the prolate ellipsoid
-        temp1 = [i for i, e in enumerate(temp_coords) if e <= 1]  # indices of the appropriate points
-        saved_coords = [coord_scaled[i] for i in temp1]  # saved in x, y, z format
-        temp_cells[temp_ind].coords[i0] = saved_coords
-        temp_int_fl = np.sum([temp_im[(temp2[2], temp2[1],temp2[0])] for temp2 in saved_coords])  # integrating the
-        # fluorescence. Note inserting this in z, y, x format to be consistent with image format
-        temp_cells[temp_ind].int_fl[i0] = temp_int_fl
-        print 'finished cell {0}'.format(temp_ind)
-    return temp_cells
+# def add_fluorescence_traces_v0(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd):
+#     # z_scaling gives the ratio of the z stepsize in um to the x,y pixel size in um.
+#     temp_im = io.imread(temp_path)-bkgd  # subtracting the average background at each xy point
+#     print temp_im.shape
+#     for temp_ind in frame_list:
+#         i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+#         if current_frame!=temp_cells[temp_ind].frames[i0]:
+#             print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
+#             raise ValueError('Wrong frame selected')
+#         # gives the index for the current frame in that cell's history
+#         temp_vals = temp_cells[temp_ind].ellipse_fit[i0]
+#         temp_centre = np.array([temp_vals[3][1], temp_vals[3][0], temp_im.shape[2]/2+1+z_offset])  # reversed from centroid to
+#         # give x, y, z here. z_offset accounts for the shift in focal plane of brightfield image relative to the
+#         # ideal focal plane.
+#         temp_scale = np.array([temp_vals[0], temp_vals[1], temp_vals[1]/z_scaling])
+#         Z, Y, X = np.meshgrid(range(0,temp_im.shape[0]), range(temp_im.shape[1]), range(temp_im.shape[2]))
+#         xlist, ylist, zlist = X.ravel(), Y.ravel(), Z.ravel()
+#         coord_scaled = zip(xlist, ylist, zlist)
+#         temp_mat = rotation_3d(-temp_vals[2])  # inverse rotation about Z axis to determine viable points
+#         print 'I got here'
+#         temp_coords = [np.linalg.norm((np.dot(temp_mat, (a - temp_centre))/temp_scale)) for a in coord_scaled]
+#         print 'I got further'
+#         # confirming that these points sit within the volume defined by the prolate ellipsoid
+#         temp1 = [i for i, e in enumerate(temp_coords) if e <= 1]  # indices of the appropriate points
+#         saved_coords = [coord_scaled[i] for i in temp1]  # saved in x, y, z format
+#         temp_cells[temp_ind].coords[i0] = saved_coords
+#         temp_int_fl = np.sum([temp_im[(temp2[2], temp2[1],temp2[0])] for temp2 in saved_coords])  # integrating the
+#         # fluorescence. Note inserting this in z, y, x format to be consistent with image format
+#         temp_cells[temp_ind].int_fl[i0] = temp_int_fl
+#         print 'finished cell {0}'.format(temp_ind)
+#     return temp_cells
 
 
-def add_fluorescence_traces_v1(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd, save_coords=True):
-    # This is the updated version of add_fluorescence_traces, where instead of comparing all points in the image
-    # like a sucker, we now compare points in a bounding box around the cell roughly 1/100 the size of the full image.
-    # bkgd is a np array of the same dimensions as the image in question which stores the average background at each
-    # pixel
-    # save_coords is a boolean value which determines whether we store the pixel coordinates of each cell.
-    # z_scaling gives the ratio of the z stepsize in um to the x,y pixel size in um.
-    temp_im = io.imread(temp_path)-bkgd  # subtracting the average background at each xy point. Structure is (z,y,x)
-    print temp_im.shape
-    temp_mask = np.zeros(temp_im.shape)  # this will be a binary mask to track the location of each cell
-
-    for temp_ind in frame_list:
-        i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
-        if current_frame!=temp_cells[temp_ind].frames[i0]:
-            print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
-            raise ValueError('Wrong frame selected')
-        # gives the index for the current frame in that cell's history
-        temp_vals = temp_cells[temp_ind].ellipse_fit[i0]
-        temp_centre = np.array([temp_vals[3][0], temp_vals[3][1], temp_im.shape[0]/2+1+z_offset])  # reversed from
-        # centroid to give x, y, z here. z_offset accounts for the shift in focal plane of brightfield image relative to
-        # the ideal focal plane.
-        tc, temp_maj= np.floor(temp_centre), np.ceil(1.2*temp_vals[0])
-        temp_scale = np.array([temp_vals[0], temp_vals[1], temp_vals[1]/z_scaling])
-
-        # This part is different from add_fluorescence_traces_v0. We define a set of coordinates in a bounding box
-        # around the cell of interest. This allows us to greatly reduce the computation time.
-        X, Y, Z = np.meshgrid(np.arange(np.maximum(tc[0]-temp_maj, 0), np.minimum(tc[0]+temp_maj, temp_im.shape[2])).astype(int),
-                              np.arange(np.maximum(tc[1]-temp_maj, 0), np.minimum(tc[1]+temp_maj, temp_im.shape[1])).astype(int),
-                              np.arange(0, temp_im.shape[0]).astype(int))
-
-        xlist, ylist, zlist = X.ravel(), Y.ravel(), Z.ravel()
-        coord_scaled = zip(xlist, ylist, zlist)
-        # print temp_centre, coord_scaled
-        # raise ValueError('fucked up')
-        temp_mat = rotation_3d(-temp_vals[2])  # inverse rotation about Z axis to determine viable points
-        # print 'I got here'
-        temp_coords = [np.linalg.norm((np.dot(temp_mat, (a - temp_centre))/temp_scale)) for a in coord_scaled]
-
-        # print 'I got further'
-        # confirming that these points sit within the volume defined by the prolate ellipsoid
-        temp1 = [i for i, e in enumerate(temp_coords) if e <= 1]  # indices of the appropriate points
-        saved_coords = [coord_scaled[i] for i in temp1]  # saved in x, y, z format
-        xtemp, ytemp, ztemp = zip(*saved_coords)  # generating lists of points
-
-        # saving coordinates if necessary
-        if save_coords:
-            temp_cells[temp_ind].coords[i0] = saved_coords
-        # saving fluorescence if necessary
-        temp_cells[temp_ind].fluor_vals[i0] = temp_im[ztemp, ytemp, xtemp]  # generating a list of fluorescence values
-        # to get good statistics. Note image formatting with z, y, x.
-
-        temp_int_fl = np.sum(temp_im[ztemp, ytemp, xtemp])  # integrating the
-        # fluorescence. Note inserting this in z, y, x format to be consistent with image format
-        temp_cells[temp_ind].int_fl[i0] = temp_int_fl
-        print 'finished cell {0}'.format(temp_ind), temp_int_fl, len(saved_coords)
-        for temp2 in saved_coords:
-            temp_mask[(temp2[2], temp2[1], temp2[0])] = 1  # storing these coordinates in an array
-    return temp_cells, temp_mask
+# def add_fluorescence_traces_v1(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd, save_coords=True):
+#     # This is the updated version of add_fluorescence_traces, where instead of comparing all points in the image
+#     # like a sucker, we now compare points in a bounding box around the cell roughly 1/100 the size of the full image.
+#     # bkgd is a np array of the same dimensions as the image in question which stores the average background at each
+#     # pixel
+#     # save_coords is a boolean value which determines whether we store the pixel coordinates of each cell.
+#     # z_scaling gives the ratio of the z stepsize in um to the x,y pixel size in um.
+#     temp_im = io.imread(temp_path)-bkgd  # subtracting the average background at each xy point. Structure is (z,y,x)
+#     print temp_im.shape
+#     temp_mask = np.zeros(temp_im.shape)  # this will be a binary mask to track the location of each cell
+#
+#     for temp_ind in frame_list:
+#         i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
+#         if current_frame!=temp_cells[temp_ind].frames[i0]:
+#             print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
+#             raise ValueError('Wrong frame selected')
+#         # gives the index for the current frame in that cell's history
+#         temp_vals = temp_cells[temp_ind].ellipse_fit[i0]
+#         temp_centre = np.array([temp_vals[3][0], temp_vals[3][1], temp_im.shape[0]/2+1+z_offset])  # reversed from
+#         # centroid to give x, y, z here. z_offset accounts for the shift in focal plane of brightfield image relative to
+#         # the ideal focal plane.
+#         tc, temp_maj= np.floor(temp_centre), np.ceil(1.2*temp_vals[0])
+#         temp_scale = np.array([temp_vals[0], temp_vals[1], temp_vals[1]/z_scaling])
+#
+#         # This part is different from add_fluorescence_traces_v0. We define a set of coordinates in a bounding box
+#         # around the cell of interest. This allows us to greatly reduce the computation time.
+#         X, Y, Z = np.meshgrid(np.arange(np.maximum(tc[0]-temp_maj, 0), np.minimum(tc[0]+temp_maj, temp_im.shape[2])).astype(int),
+#                               np.arange(np.maximum(tc[1]-temp_maj, 0), np.minimum(tc[1]+temp_maj, temp_im.shape[1])).astype(int),
+#                               np.arange(0, temp_im.shape[0]).astype(int))
+#
+#         xlist, ylist, zlist = X.ravel(), Y.ravel(), Z.ravel()
+#         coord_scaled = zip(xlist, ylist, zlist)
+#         # print temp_centre, coord_scaled
+#         # raise ValueError('fucked up')
+#         temp_mat = rotation_3d(-temp_vals[2])  # inverse rotation about Z axis to determine viable points
+#         # print 'I got here'
+#         temp_coords = [np.linalg.norm((np.dot(temp_mat, (a - temp_centre))/temp_scale)) for a in coord_scaled]
+#
+#         # print 'I got further'
+#         # confirming that these points sit within the volume defined by the prolate ellipsoid
+#         temp1 = [i for i, e in enumerate(temp_coords) if e <= 1]  # indices of the appropriate points
+#         saved_coords = [coord_scaled[i] for i in temp1]  # saved in x, y, z format
+#         xtemp, ytemp, ztemp = zip(*saved_coords)  # generating lists of points
+#
+#         # saving coordinates if necessary
+#         if save_coords:
+#             temp_cells[temp_ind].coords[i0] = saved_coords
+#         # saving fluorescence if necessary
+#         temp_cells[temp_ind].fluor_vals[i0] = temp_im[ztemp, ytemp, xtemp]  # generating a list of fluorescence values
+#         # to get good statistics. Note image formatting with z, y, x.
+#
+#         temp_int_fl = np.sum(temp_im[ztemp, ytemp, xtemp])  # integrating the
+#         # fluorescence. Note inserting this in z, y, x format to be consistent with image format
+#         temp_cells[temp_ind].int_fl[i0] = temp_int_fl
+#         print 'finished cell {0}'.format(temp_ind), temp_int_fl, len(saved_coords)
+#         for temp2 in saved_coords:
+#             temp_mask[(temp2[2], temp2[1], temp2[0])] = 1  # storing these coordinates in an array
+#     return temp_cells, temp_mask
 
 
 def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd,
-                               save_coords=True, exists_c2=None):
-    # This is the updated version of add_fluorescence_traces_v1, where we add both the pixels within the cell volume,
-    # and also do a z-sum for the fluorescence above the 2d cell segmentation
-    # save_coords is a boolean value which determines whether we store the pixel coordinates of each cell.
-    # z_scaling gives the ratio of the z stepsize in um to the x,y pixel size in um.
+                               save_coords=False, exists_c2=None):
+    # This is the updated version of add_fluorescence_traces_v1, where we only consider the fluorescence values in the
+    # full z-stack. We no longer store the full fluorescence distribution either, instead extracting relevant
+    # characteristics from it such as the skewness, genie coefficient and standard deviation for the cell classification
+    # z_scaling is deprecated but gives the ratio of the z stepsize in um to the x,y pixel size in um.
+
     temp_im = io.imread(temp_path)-bkgd  # subtracting the average background at each xy point. Structure is (z,y,x)
-    # temp_im1 = np.sum(temp_im, axis=0)
-    # print temp_im.shape
     temp_mask = np.zeros(temp_im.shape)  # this will be a binary mask to track the location of each cell
 
     for temp_ind in frame_list:
-        # i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
         i0 = temp_cells[temp_ind].frames.index(current_frame)
         if current_frame != temp_cells[temp_ind].frames[i0]:
-            print i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
+            print(i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames)
             raise ValueError('Wrong frame selected')
-        # gives the index for the current frame in that cell's history
-        temp_vals = temp_cells[temp_ind].ellipse_fit[i0]
-        temp_centre = np.array([temp_vals[3][0], temp_vals[3][1], temp_im.shape[0]/2+1+z_offset])  # reversed from
-        # centroid to give x, y, z here. z_offset accounts for the shift in focal plane of brightfield image relative to
-        # the ideal focal plane.
-        tc, temp_maj = np.floor(temp_centre), np.ceil(1.2*temp_vals[0])
-        temp_scale = np.array([temp_vals[0], temp_vals[1], temp_vals[1]/z_scaling])
+            # gives the index for the current frame in that cell's history
 
-        # This part is different from add_fluorescence_traces_v0. We define a set of coordinates in a bounding box
-        # around the cell of interest. This allows us to greatly reduce the computation time.
-        X, Y, Z = np.meshgrid(np.arange(np.maximum(tc[0]-temp_maj, 0), np.minimum(tc[0]+temp_maj, temp_im.shape[2])).astype(int),
-                              np.arange(np.maximum(tc[1]-temp_maj, 0), np.minimum(tc[1]+temp_maj, temp_im.shape[1])).astype(int),
-                              np.arange(0, temp_im.shape[0]).astype(int))
-
-        xlist, ylist, zlist = X.ravel(), Y.ravel(), Z.ravel()
-        coord_scaled = zip(xlist, ylist, zlist)
-        # print temp_centre, coord_scaled
-        # raise ValueError('fucked up')
-        temp_mat = rotation_3d(-temp_vals[2])  # inverse rotation about Z axis to determine viable points
-        # print 'I got here'
-        temp_coords = [np.linalg.norm((np.dot(temp_mat, (a - temp_centre))/temp_scale)) for a in coord_scaled]
-
-        # print 'I got further'
-        # confirming that these points sit within the volume defined by the prolate ellipsoid
-        temp1 = [i for i, e in enumerate(temp_coords) if e <= 1]  # indices of the appropriate points
-        saved_coords = [coord_scaled[i] for i in temp1]  # saved in x, y, z format
-        xtemp, ytemp, ztemp = zip(*saved_coords)  # generating lists of points
-
-        # saving coordinates if necessary
-        if save_coords:
-            temp_cells[temp_ind].coords[i0] = saved_coords
-        # saving fluorescence if necessary
-        temp_cells[temp_ind].fluor_vals[i0] = temp_im[ztemp, ytemp, xtemp]  # generating a list of fluorescence values
-        # to get good statistics. Note image formatting with z, y, x.
-
-        temp_int_fl = np.sum(temp_im[ztemp, ytemp, xtemp])  # integrating the
-        # fluorescence. Note inserting this in z, y, x format to be consistent with image format
-        temp_cells[temp_ind].int_fl[i0] = temp_int_fl
+        # saving relevant fluorescence statistics
         temp_coords = temp_cells[temp_ind].segment_coords[i0]
-        temp_cells[temp_ind].zproj_fluor_vals[i0] = np.sum(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])  # calculating
-        # the full z projection as well.
-        # print 'finished cell {0}'.format(temp_ind), temp_int_fl, len(saved_coords)
-        for temp2 in saved_coords:
-            temp_mask[(temp2[2], temp2[1], temp2[0])] = 1  # storing these coordinates in an array
+        temp_cells[temp_ind].fluor_skew[i0] = scipy.stats.skew(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # skew
+        temp_cells[temp_ind].fluor_cv[i0] = scipy.stats.variation(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # CV
+        temp_cells[temp_ind].fluor_gini[i0] = gini(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])  # Gini coefficient
+
+        # generating a list of fluorescence values to get good statistics. Note image formatting with z, y, x.
+        temp_cells[temp_ind].zproj_fluor_vals[i0] = np.sum(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # calculating the full z projection as well.
+        for temp2 in temp_coords:
+            temp_mask[:, temp2[1], temp2[0]] = 1  # storing these coordinates in an array
         if not(exists_c2 is None):  # if we have the data then we have to also add fluorescence integrated from
             # segmented pixels
             temp_cells[temp_ind].pixel_thresh_fluor_vals[i0] = np.sum(temp_im[temp_cells[temp_ind].pixel_thresh_coords[i0]])
-    print 'Number of cells = {0}'.format(temp_ind)
+    print('Number of cells = {0}'.format(temp_ind))
     return temp_cells, temp_mask
 
 
@@ -500,7 +473,7 @@ def fit_ellipse(temp_im):
                    np.linspace(0.0, 2 * math.pi, 20)]
     # print temp1, temp2, temp3
     return [temp1, temp2, temp3, temp4[::-1], temp_coords, temp[0].coords]  # major length, minor length, orientation, centroid,
-    #  (centroid should be x, y), coordinates of ellipse
+    #  (centroid should be x, y), coordinates of ellipse in format (y, x)
 
 
 def generate_ellipse_coords(temp_vals):
@@ -643,10 +616,10 @@ def assign_labels_3(temp_cells, temp_inds, temp_coords, temp_frame_num):
     return temp_cells, assignments_made
 
 
-def automated_whi5_assignment_1(temp_cells, temp_cutoff):
+def automated_whi5_assignment_1(temp_cells, temp_cutoff):  # MUST BE CHANGED TO IMPLEMENT MACHINE LEARNING APPROACH
     for obj in temp_cells:
         for i0 in range(len(obj.frames)):
-            obj.nuclear_whi5[i0] = scipy.stats.skew(obj.fluor_vals[i0])>temp_cutoff
+            obj.nuclear_whi5[i0] = scipy.stats.skew(obj.zproj_fluor_vals[i0])>temp_cutoff
     return temp_cells
 
 
@@ -820,7 +793,7 @@ def integrate_bud_data(temp_cycles):
             else:
                 obj.error = True
 
-            obj.int_fl_bud = []
+            # obj.int_fl_bud = []  # deprecated
             obj.vbud = []
             obj.ellipse_fit_bud = []
             obj.zproj_fl_bud = []
@@ -833,7 +806,7 @@ def integrate_bud_data(temp_cycles):
             for temp_ind in range(len(obj.frames)):
                 obj.zproj_fl_bud.append(0)
                 obj.vbud.append(0)
-                obj.int_fl_bud.append(0)
+                # obj.int_fl_bud.append(0)  # deprecated
                 obj.ellipse_fit_bud.append(0)
                 obj.bud_seg.append(None)
                 obj.zproj_fl_bud_c2.append(0)
@@ -848,7 +821,7 @@ def integrate_bud_data(temp_cycles):
                     temp_ind = obj.frames.index(ind)
                     temp_bud_ind = indices.index(obj.bud)
                     obj.vbud[temp_ind] = temp_cycles[temp_bud_ind].ellipse_volume[ind-temp_cycles[temp_bud_ind].frames[0]]
-                    obj.int_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].int_fl[ind-temp_cycles[temp_bud_ind].frames[0]]
+                    # obj.int_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].int_fl[ind-temp_cycles[temp_bud_ind].frames[0]]  # deprecated
                     obj.zproj_fl_bud[temp_ind] = temp_cycles[temp_bud_ind].zproj_fl[ind - temp_cycles[temp_bud_ind].frames[0]]
                     obj.ellipse_fit_bud[temp_ind] = temp_cycles[temp_bud_ind].ellipse_fit[ind - temp_cycles[temp_bud_ind].frames[0]]
                     obj.bud_seg[temp_ind] = temp_cycles[temp_bud_ind].segment_coords[ind-temp_cycles[temp_bud_ind].frames[0]]
@@ -1252,45 +1225,29 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
     temp1 = [[], [], []]  # G1 cells
     temp2 = [[], [], []]  # G2 cells
     for obj in c:
-        c1 = [obj.fluor_vals[i0] for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] and
-              obj.frames[i0]<temp_analyzed_frames]
+        c1 = [(obj.fluor_skew[i0], obj.fluor_cv[i0], obj.fluor_gini[i0]) for i0 in range(len(obj.frames))\
+              if obj.nuclear_whi5[i0] and obj.frames[i0] < temp_analyzed_frames]
         c2 = [obj.index for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] and
-              obj.frames[i0]<temp_analyzed_frames]
+              obj.frames[i0] < temp_analyzed_frames]
         c3 = [obj.frames[i0] for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] and
-              obj.frames[i0]<temp_analyzed_frames]
-        c4 = [obj.fluor_vals[i0] for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] == 0 and
-              obj.frames[i0]<temp_analyzed_frames]
+              obj.frames[i0] < temp_analyzed_frames]
+        c4 = [(obj.fluor_skew[i0], obj.fluor_cv[i0], obj.fluor_gini[i0]) for i0 in range(len(obj.frames))\
+              if obj.nuclear_whi5[i0] == 0 and obj.frames[i0] < temp_analyzed_frames]
         c5 = [obj.index for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] == 0 and
-              obj.frames[i0]<temp_analyzed_frames]
+              obj.frames[i0] < temp_analyzed_frames]
         c6 = [i0 for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] == 0 and
-              obj.frames[i0]<temp_analyzed_frames]
-        temp1[0] += c1
+              obj.frames[i0] < temp_analyzed_frames]
+        temp1[0] += zip(*c1)
         temp1[1] += c2
         temp1[2] += c3
-        temp2[0] += c4
+        temp2[0] += zip(*c4)
         temp2[1] += c5
         temp2[2] += c6
 
     lower_bound = 0.01
 
-
-    v1 = [np.amax(vals) for vals in temp1[0]]
-    v2 = [np.amax(vals) for vals in temp2[0]]
-    make_dist_plots_1 = 1
-    if make_dist_plots_1:
-        import seaborn as sns
-        fig = plt.figure(figsize=[5, 5])
-        sns.distplot(v1, label='Nuclear')
-        sns.distplot(v2, label='Cytoplasmic')
-        plt.legend()
-        plt.xlabel('Max brightness')
-        plt.title('Maximum brightness in manually annotated cell populations')
-        fig.savefig(directory + '/plots/brightness')
-        del fig
-
-
-    v1 = [scipy.stats.skew(vals) for vals in temp1[0]]
-    v2 = [scipy.stats.skew(vals) for vals in temp2[0]]
+    v1 = temp1[0][0]
+    v2 = temp2[0][0]
     make_dist_plots_1 = 1
     if make_dist_plots_1:
         import seaborn as sns
@@ -1301,6 +1258,34 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
         plt.xlabel('Skewness')
         plt.title('Skewness in manually annotated cell populations')
         fig.savefig(directory + '/plots/skewness')
+        del fig
+
+    v1 = temp1[0][1]
+    v2 = temp2[0][1]
+    make_dist_plots_1 = 1
+    if make_dist_plots_1:
+        import seaborn as sns
+        fig = plt.figure(figsize=[5, 5])
+        sns.distplot(v1, label='Nuclear')
+        sns.distplot(v2, label='Cytoplasmic')
+        plt.legend()
+        plt.xlabel('CV')
+        plt.title('CV in manually annotated cell populations')
+        fig.savefig(directory + '/plots/cv')
+        del fig
+
+    v1 = temp1[0][2]
+    v2 = temp2[0][2]
+    make_dist_plots_1 = 1
+    if make_dist_plots_1:
+        import seaborn as sns
+        fig = plt.figure(figsize=[5, 5])
+        sns.distplot(v1, label='Nuclear')
+        sns.distplot(v2, label='Cytoplasmic')
+        plt.legend()
+        plt.xlabel('Gini')
+        plt.title('Gini coefficient in manually annotated cell populations')
+        fig.savefig(directory + '/plots/gini')
         del fig
 
     fig = plt.figure(figsize=[5, 5])
@@ -1318,8 +1303,9 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
     plt.legend()
     fig.savefig(directory + '/plots/skewness_bounding')
 
-    # exit()
-    # making initial plots of single cell distributions
+    #####
+    # making initial plots of single cell distributions. Deprecated since we no longer store this level of detailed
+    # information.
     make_dist_plots = 0
     if make_dist_plots:
         import seaborn as sns
@@ -1360,7 +1346,7 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
                     plt.legend()
                     fig.savefig(
                         directory + '/plots/norm_G1_{0}_cell_{1}_frame_{2}'.format(i0, temp2[1][ind1], temp2[2][ind1]))
-
+    #####
     # Automatically classifying cells based on skewness cutoff
     automate_analysis = 1
     if automate_analysis:
@@ -1804,6 +1790,29 @@ def create_cycles_full(temp_base_path, temp_expt_path, temp_num_scenes):
         [1 for obj in cc if obj.complete and not (obj.daughter is None) and obj.celltype == 0 and not obj.error])
 
     save_object(cc, temp_base_path + temp_expt_path + '/cell_cycles_compiled.pkl'.format(scene))
+
+
+def gini(array):  # https://github.com/oliviaguest/gini/blob/master/gini.py, accessed 02/7/2019
+    """Calculate the Gini coefficient of a numpy array."""
+    # based on bottom eq:
+    # http://www.statsdirect.com/help/generatedimages/equations/equation154.svg
+    # from:
+    # http://www.statsdirect.com/help/default.htm#nonparametric_methods/gini.htm
+    # All values are treated equally, arrays must be 1d:
+    array = array.flatten()
+    if np.amin(array) < 0:
+        # Values cannot be negative:
+        array -= np.amin(array)
+    # Values cannot be 0:
+    array += 0.0000001
+    # Values must be sorted:
+    array = np.sort(array)
+    # Index per array element:
+    index = np.arange(1,array.shape[0]+1)
+    # Number of array elements:
+    n = array.shape[0]
+    # Gini coefficient:
+    return (np.sum((2 * index - n - 1) * array)) / (n * np.sum(array))
 
 
 def study_cell(temp_cell):
