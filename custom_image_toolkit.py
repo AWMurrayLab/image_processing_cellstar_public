@@ -16,9 +16,12 @@ import math
 from skimage import io
 import os
 from matplotlib import cm
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 
 # helper
-
+fluor_chars_names = ['Skew', 'CV', 'Gini']
 
 class Cell(object):
     cellCount = 0  # total number of cells
@@ -35,9 +38,7 @@ class Cell(object):
         self.area = [birth_parameters['2d_area']]
         self.nuclear_whi5 = [0]  # we will change this later depending on fluorescence data
         self.type = -1  # if cells are undetermined we label them a -1
-        self.fluor_skew = [0]  # fluorescence skewness at each time point
-        self.fluor_cv = [0]  # fluorescence cv at each time point
-        self.fluor_gini = [0]  # fluorescence gini coefficient at each time point
+        self.fluor_chars = [0]  # fluorescence characteristics at each time point
         self.segment_coords = [birth_parameters['segment_coords']]  # in format (y, x)  (row, col)
         self.zproj_fluor_vals = [0]
         self.zproj_fluor_vals_c2 = [0]
@@ -57,9 +58,7 @@ class Cell(object):
         self.ellipse_volume.append(frame_parameters['ellipse_volume'])
         self.area.append(frame_parameters['2d_area'])
         self.nuclear_whi5.append(0)
-        self.fluor_skew.append(0)
-        self.fluor_cv.append(0)
-        self.fluor_gini.append(0)
+        self.fluor_chars.append(0)  # appending a characteristics list at each timepoint
         self.zproj_fluor_vals.append(0)
         self.zproj_fluor_vals_c2.append(0)
         self.segment_coords.append(frame_parameters['segment_coords'])
@@ -342,12 +341,13 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
 
         # saving relevant fluorescence statistics
         temp_coords = temp_cells[temp_ind].segment_coords[i0]
-        temp_cells[temp_ind].fluor_skew[i0] = scipy.stats.skew(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
+        temp_chars = list([])
+        temp_chars.append(scipy.stats.skew(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]]))
         # skew
-        temp_cells[temp_ind].fluor_cv[i0] = scipy.stats.variation(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
+        temp_chars.append(scipy.stats.variation(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]]))
         # CV
-        temp_cells[temp_ind].fluor_gini[i0] = gini(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])  # Gini coefficient
-
+        temp_chars.append(gini(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]]))  # Gini coefficient
+        temp_cells[temp_ind].fluor_chars[i0] = temp_chars
         # generating a list of fluorescence values to get good statistics. Note image formatting with z, y, x.
         temp_cells[temp_ind].zproj_fluor_vals[i0] = np.sum(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
         # calculating the full z projection as well.
@@ -355,7 +355,8 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
             temp_mask[:, temp2[1], temp2[0]] = 1  # storing these coordinates in an array
         if not(exists_c2 is None):  # if we have the data then we have to also add fluorescence integrated from
             # segmented pixels
-            temp_cells[temp_ind].pixel_thresh_fluor_vals[i0] = np.sum(temp_im[temp_cells[temp_ind].pixel_thresh_coords[i0]])
+            temp_cells[temp_ind].pixel_thresh_fluor_vals[i0] =\
+                np.sum(temp_im[temp_cells[temp_ind].pixel_thresh_coords[i0]])
     print('Number of cells = {0}'.format(temp_ind))
     return temp_cells, temp_mask
 
@@ -1146,57 +1147,65 @@ def populate_cells_all_scenes_3(temp_base_path, temp_expt_path, temp_label_path,
 def track_localization_manual_annotation(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename,
                                          temp_num_frames, temp_analyzed_scene, temp_threshold, temp_drange,
                                          temp_analyzed_frames, temp_label_path):
-    # temp_analyzed_scene is the scene number that was annotated to give ground truth for Whi5 localization.
+    # Note: Ensure that track_localization_final.py has run successfully with the correct parameters prior to running
+    # this script.
+    # this function takes the annotated datasets for Whi5 localization and integrates it into the cell data, so that
+    # cells are labeled as containing Whi5 in the correct timepoints. This is then fed into analyze_whi5_distribution.
+    # temp_analyzed_scene was previously the scene number that was annotated to give ground truth for Whi5 localization.
+    # Now deprecated.
     # temp_num_frames is the number of frames analyzed in temp_analyzed_scene.
-    directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_analyzed_scene)
+
+    directory = temp_base_path + temp_expt_path + '/whi5_analysis'
+    temp_frame_indexes = np.load(directory + '/samples.npy')  # gives the indices of all the analyzed frames.
+    temp_indexing = [int(np.sum(temp_num_frames[:i0])) for i0 in range(0, len(temp_num_frames))]
+    temp_scenes = [np.searchsorted(temp_indexing, temp_ind, side='right') for temp_ind in temp_frame_indexes]
+    # scene numbers
+    temp_frames = [temp_frame_indexes[i0] - temp_indexing[temp_scenes[i0] - 1] + 1
+                   for i0 in range(len(temp_frame_indexes))]  # frame numbers
     fluor_name = temp_image_filename + temp_fl_filename
     # drange = 65535.0
-    # opening cell file
-    if temp_label_path is None:  # in this case we didn't do the labeling since we don't have labels
-        temp_loading_path = directory + '/cells_fl_scene_{0}.pkl'.format(temp_analyzed_scene)
-    else:
-        temp_loading_path = directory + '/cells_fl_lab_scene_{0}.pkl'.format(temp_analyzed_scene)
-    with open(temp_loading_path, 'rb') as input:
-        c = pickle.load(input)
-    frame_list = [obj.frames for obj in c]
-    # loading cell outlines to confirm assignments
-    outlines = np.load(directory + '/cell_outlines_scene_{0}.npy'.format(temp_analyzed_scene))
-    for frame_num in range(1, temp_analyzed_frames):
-        temp2 = [(frame_num in temp1) for temp1 in frame_list]
-        update_list = [i for i, e in enumerate(temp2) if
-                       e != 0]  # gives the indices of each object in the current frame
-
-        temp = np.load(
-            directory + '/fl_loc_centres/scene_{0}_frame_{1}.npy'.format(temp_analyzed_scene, frame_num))
+    for i0 in range(len(temp_frame_indexes)):  # iterating through each frame
+        dir1 = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_scenes[i0])
+        # opening cell file
+        if temp_label_path is None:  # in this case we didn't do the labeling since we don't have labels
+            temp_loading_path = dir1 + '/cells_fl_scene_{0}.pkl'.format(temp_scenes[i0])
+        else:
+            temp_loading_path = dir1 + '/cells_fl_lab_scene_{0}.pkl'.format(temp_scenes[i0])
+        with open(temp_loading_path, 'rb') as input:
+            c = pickle.load(input)
+        frame_list = [obj.frames for obj in c]
+        # loading cell outlines to confirm assignments
+        outlines = np.load(dir1 + '/cell_outlines_scene_{0}.npy'.format(temp_scenes[i0]))
+        temp2 = [(temp_frames[i0] in temp1) for temp1 in frame_list]  # checking whether cells are in the current frame
+        update_list = [i for i, e in enumerate(temp2) if e != 0]  # indices of all cells that are in the current frame
         # tracked centroids in format x, y
-        coords = zip(temp[:, 0], temp[:, 1])
+        temp = np.load(
+            directory + '/fl_loc_centres/scene_{0}_frame_{1}.npy'.format(temp_scenes[i0], temp_frames[i0]))
+        # gives the coordinate list of all annotated cells in the current frame
+        coords = zip(temp[:, 1], temp[:, 2])
         # print coords, temp
         # coords now stores the coordinates of cell center points for the analyzed scene, given the current frame
         # num
-        c, assignments = assign_labels_3(c, update_list, coords, frame_num)
-        save_object(c, directory + '/cells_scene_{0}_v1.pkl'.format(temp_analyzed_scene))
-
+        c, assignments = assign_labels_3(c, update_list, coords, temp_frames[i0])
+        save_object(c, dir1 + '/cells_scene_{0}_v1.pkl'.format(temp_analyzed_scene))
         # organizing figure data
         temp_im = io.imread(
-            temp_base_path + temp_expt_path + fluor_name + 's{0}_t{1}.TIF'.format(str(temp_analyzed_scene),
-                                                                                  str(frame_num)))
+            temp_base_path + temp_expt_path + fluor_name + 's{0}_t{1}.TIF'.format(temp_scenes[i0], temp_frames[i0]))
         temp_im1 = temp_im/temp_drange
         if np.sum(temp_im > temp_threshold) > 0:
             temp_im1 = np.log(np.amax(temp_im1, axis=0) / np.amax(temp_im1))
-            # using a log scale in this case because this image contains the frustrating high energy pixels that sometimes
-            # crop up
+            # using a log scale in this case because this image contains the frustrating high energy pixels that
+            # sometimes crop up
         else:
             temp_im1 = np.amax(temp_im1, axis=0) / np.amax(temp_im1)
-        # print temp_im.dtype
-        # exit()
-        # temp_im1 = np.amax(temp_im, axis=0) / np.amax(temp_im)  # scaling for visualization purposes.
-        # print np.amax(temp_im1)
-        # exit()
-        temp_im1 *= outlines[frame_num - 1, :, :] == 0
-        temp_im1 += outlines[frame_num - 1, :, :].astype('uint16')
+
+        temp_im1 *= outlines[temp_frames[i0] - 1, :, :] == 0
+        temp_im1 += outlines[temp_frames[i0] - 1, :, :].astype('uint16')
         # print c[ind].frames
-        temp_cell_coords = [c[ind].position[frame_num - c[ind].frames[0]] for ind in update_list if c[ind].nuclear_whi5[
-            frame_num - c[ind].frames[0]] == 1]  # store the centroids of the correct cells.
+        temp_cell_coords = [c[ind].position[temp_frames[i0] - c[ind].frames[0]] for ind in update_list
+                            if c[ind].nuclear_whi5[temp_frames[i0] - c[ind].frames[0]] == 1]
+        # store the centroids of the correct cells.
+
         # plotting figures
         fig = plt.figure(figsize=[10, 10], frameon=False)
         ax = plt.Axes(fig, [0., 0., 1., 1.])
@@ -1209,84 +1218,65 @@ def track_localization_manual_annotation(temp_base_path, temp_expt_path, temp_im
         fig.subplots_adjust(top=1)
         fig.subplots_adjust(right=1)
         fig.subplots_adjust(left=0)
-        fig.savefig(directory + '/images/whi5_assignments_frame_{0}.tif'.format(frame_num))
+        fig.savefig(directory +
+                    '/images/whi5_assignments_scene_{0}_frame_{1}.tif'.format(temp_scenes[i0], temp_frames[i0]))
 
 
 def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename, temp_num_frames,
                               temp_analyzed_scene, temp_num_scenes, temp_threshold, temp_drange, temp_analyzed_frames,
                               temp_label_path, temp_sel_scenes=None):
     # temp_label_path determines whether we use the output from populate_cells_all_scenes_3 or 2.
-    directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_analyzed_scene)
-
-    with open(directory + '/cells_scene_{0}_v1.pkl'.format(temp_analyzed_scene), 'rb') as input:
-        c = pickle.load(input)
-    if not os.path.exists(directory + '/plots'):
-        os.makedirs(directory + '/plots')
+    temp_dir = temp_base_path + temp_expt_path + '/whi5_analysis'
+    temp_frame_indexes = np.load(temp_dir + '/samples.npy')  # gives the indices of all the analyzed frames.
+    temp_indexing = [int(np.sum(temp_num_frames[:i0])) for i0 in range(0, len(temp_num_frames))]
+    temp_scenes = [np.searchsorted(temp_indexing, temp_ind, side='right') for temp_ind in temp_frame_indexes]
+    # scene numbers
+    temp_frames = [temp_frame_indexes[i0] - temp_indexing[temp_scenes[i0] - 1] + 1
+                   for i0 in range(len(temp_frame_indexes))]  # frame numbers
+    if not os.path.exists(temp_dir + '/plots'):
+        os.makedirs(temp_dir + '/plots')
     temp1 = [[], [], []]  # G1 cells
     temp2 = [[], [], []]  # G2 cells
-    for obj in c:
-        c1 = [(obj.fluor_skew[i0], obj.fluor_cv[i0], obj.fluor_gini[i0]) for i0 in range(len(obj.frames))\
-              if obj.nuclear_whi5[i0] and obj.frames[i0] < temp_analyzed_frames]
-        c2 = [obj.index for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] and
-              obj.frames[i0] < temp_analyzed_frames]
-        c3 = [obj.frames[i0] for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] and
-              obj.frames[i0] < temp_analyzed_frames]
-        c4 = [(obj.fluor_skew[i0], obj.fluor_cv[i0], obj.fluor_gini[i0]) for i0 in range(len(obj.frames))\
-              if obj.nuclear_whi5[i0] == 0 and obj.frames[i0] < temp_analyzed_frames]
-        c5 = [obj.index for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] == 0 and
-              obj.frames[i0] < temp_analyzed_frames]
-        c6 = [i0 for i0 in range(len(obj.frames)) if obj.nuclear_whi5[i0] == 0 and
-              obj.frames[i0] < temp_analyzed_frames]
-        temp1[0] += zip(*c1)
+    for i0 in range(len(temp_frame_indexes)):
+        directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_scenes[i0])
+        with open(directory + '/cells_scene_{0}_v1.pkl'.format(temp_scenes[i0]), 'rb') as input:
+            c = pickle.load(input)
+        c1, c2, c3, c4, c5, c6 = [], [], [], [], [], []
+        for obj in c:
+            if (temp_frames[i0] in obj.frames[i0]) and obj.nuclear_whi5[temp_frames[i0]-obj.frames[0]]:
+                temp_ind = temp_frames[i0]-obj.frames[0]
+                c1.append(obj.fluor_chars[temp_ind])
+                c2.append(obj.index)
+                c3.append(obj.frames[temp_ind])
+            elif (temp_frames[i0] in obj.frames[i0]) and obj.nuclear_whi5[temp_frames[i0] - obj.frames[0]] == 0:
+                temp_ind = temp_frames[i0] - obj.frames[0]
+                c4.append(obj.fluor_chars[temp_ind])
+                c5.append(obj.index)
+                c6.append(obj.frames[temp_ind])
+        temp1[0] += c1
         temp1[1] += c2
         temp1[2] += c3
-        temp2[0] += zip(*c4)
+        temp2[0] += c4
         temp2[1] += c5
         temp2[2] += c6
 
     lower_bound = 0.01
 
-    v1 = temp1[0][0]
-    v2 = temp2[0][0]
-    make_dist_plots_1 = 1
-    if make_dist_plots_1:
-        import seaborn as sns
-        fig = plt.figure(figsize=[5, 5])
-        sns.distplot(v1, label='Nuclear')
-        sns.distplot(v2, label='Cytoplasmic')
-        plt.legend()
-        plt.xlabel('Skewness')
-        plt.title('Skewness in manually annotated cell populations')
-        fig.savefig(directory + '/plots/skewness')
-        del fig
+    for i0 in range(len(fluor_chars_names)):
 
-    v1 = temp1[0][1]
-    v2 = temp2[0][1]
-    make_dist_plots_1 = 1
-    if make_dist_plots_1:
-        import seaborn as sns
-        fig = plt.figure(figsize=[5, 5])
-        sns.distplot(v1, label='Nuclear')
-        sns.distplot(v2, label='Cytoplasmic')
-        plt.legend()
-        plt.xlabel('CV')
-        plt.title('CV in manually annotated cell populations')
-        fig.savefig(directory + '/plots/cv')
-        del fig
-
-    v1 = temp1[0][2]
-    v2 = temp2[0][2]
-    make_dist_plots_1 = 1
-    if make_dist_plots_1:
-        import seaborn as sns
-        fig = plt.figure(figsize=[5, 5])
-        sns.distplot(v1, label='Nuclear')
-        sns.distplot(v2, label='Cytoplasmic')
-        plt.legend()
-        plt.xlabel('Gini')
-        plt.title('Gini coefficient in manually annotated cell populations')
-        fig.savefig(directory + '/plots/gini')
-        del fig
+        v1 = zip(*temp1[0])[i0]
+        v2 = zip(*temp2[0])[i0]
+        make_dist_plots_1 = 1
+        if make_dist_plots_1:
+            import seaborn as sns
+            fig = plt.figure(figsize=[5, 5])
+            sns.distplot(v1, label='Nuclear')
+            sns.distplot(v2, label='Cytoplasmic')
+            plt.legend()
+            plt.xlabel(fluor_chars_names[i0])
+            plt.title(fluor_chars_names[i0]+' in manually annotated cell populations')
+            fig.savefig(directory + '/plots/'+fluor_chars_names[i0])
+            del fig
 
     fig = plt.figure(figsize=[5, 5])
     kde = scipy.stats.gaussian_kde(v1)
@@ -1347,7 +1337,21 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
                     fig.savefig(
                         directory + '/plots/norm_G1_{0}_cell_{1}_frame_{2}'.format(i0, temp2[1][ind1], temp2[2][ind1]))
     #####
-    # Automatically classifying cells based on skewness cutoff
+
+    ##### THIS PART NEEDS TO CHANGE TO IMPLEMENT MACHINE LEARNING
+    temp_clf = SVC(kernel="linear", C=0.025)  # linear svm for classification
+    y1, y2 = np.ones(len(temp1[0])), np.zeros(len(temp2[0]))  # the values for whether cells have Whi5 nuclear localzn
+    y = np.concatenate((y1, y2))
+    X = np.array(temp1[0]+temp2[0])  # data for the relevant variables
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5, random_state=42)
+    temp_clf.fit(X_train, y_train)
+    score = temp_clf.score(X_test, y_test)
+    print "Learning algorithm score on test data:", score
+    y_test_pred = temp_clf.predict(X_test)
+    out = summary_statistics(y_test_pred, y_test)
+    print 'Accuracy, Sensitivity, Specificity'
+    print np.around(out, 4)
+
     automate_analysis = 1
     if automate_analysis:
         for scene1 in range(1, temp_num_scenes):
@@ -1381,7 +1385,7 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
                 temp_im = io.imread(
                     temp_base_path + temp_expt_path +temp_image_filename+ temp_fl_filename + 's{0}_t{1}.TIF'.format(str(scene),
                                                                                                 str(frame_num)))
-                temp_im1 = temp_im/ temp_drange
+                temp_im1 = temp_im / temp_drange
                 if np.sum(temp_im > temp_threshold) > 0:
                     temp_im1 = np.log(np.amax(temp_im1, axis=0) / np.amax(temp_im1))
                     # using a log scale in this case because this image contains the frustrating high energy pixels that
@@ -1813,6 +1817,19 @@ def gini(array):  # https://github.com/oliviaguest/gini/blob/master/gini.py, acc
     n = array.shape[0]
     # Gini coefficient:
     return (np.sum((2 * index - n - 1) * array)) / (n * np.sum(array))
+
+
+def summary_statistics(test_out, test_y):
+    num_fp = np.sum((test_out-test_y)>0)
+    num_tp = np.sum((test_out*test_y)>0)
+    num_tn = np.sum((test_out-1)*(test_y-1)>0)
+    num_fn = np.sum((test_out-test_y)<0)
+    acc = (num_tp+num_tn)*1.0/(num_fp+num_tp+num_tn+num_fn)
+    sens = num_tp*1.0/(num_tp+num_fn)
+    spec = num_tn*1.0/(num_tn+num_fp)
+    print 'FP', 'TP', 'TN', 'FN'
+    print num_fp, num_tp, num_tn, num_fn
+    return acc, sens, spec
 
 
 def study_cell(temp_cell):
