@@ -145,12 +145,41 @@ import cPickle as pickle
 # zstep = 0.7  # distance between z steps
 # tstep = 10.0
 
-# yFB79 expt 181207
+# # yFB79 expt 181207
+#
+# expt_id = '/181207_yFB79_60X_Raff_125uMGal'
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal/timelapse'
+# image_filename, bf_filename, fl_filename = '/181207_yFB79_60X_Raff_125uMGal_', \
+#                                            'w1Brightfield confocal_', \
+#                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
+# fl_filename_c2 = 'w3594 laser 10_'  # secondary fluorescence channel
+# fluor_c2 = True
+# label_path = None  # if label_path is None then this experiment doesn't use labeling
+# manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
+# num_scenes = 15  # num_scenes should be the number of scenes to analyze + 1
+# # num_frames = np.asarray([66, 66, 66, 60, 65, 56, 56, 62, 62, 56, 56, 56])
+# num_frames = np.asarray([45, 55, 61, 56, 61, 61, 61, 56, 61, 51, 51, 51, 61, 61])
+# # num_frames should be the number of frames + 1. Default is the same for
+# # each field of view.
+# num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
+# bkgd_scene = 15  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+# analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
+# threshold = 10000  # threshold for visualizing log or linear fluorescence data
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+# size_thresh = False  # do we remove the largest cells?
+# zstep = 0.7  # distance between z steps
+# tstep = 10.0
+
+
+# yFB79 expt 181207 ML replicate
 
 expt_id = '/181207_yFB79_60X_Raff_125uMGal'
 pixel_size = {'60X': 0.267, '100X': 0.16}
 scale = pixel_size['60X']
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal/timelapse'
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal_ML_test/timelapse'
 image_filename, bf_filename, fl_filename = '/181207_yFB79_60X_Raff_125uMGal_', \
                                            'w1Brightfield confocal_', \
                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
@@ -172,6 +201,7 @@ prog_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 size_thresh = False  # do we remove the largest cells?
 zstep = 0.7  # distance between z steps
 tstep = 10.0
+
 
 # saving the experimental parameters so we can just load them in future.
 
@@ -251,18 +281,25 @@ temp_df.to_csv(base_path+expt_path+'/progress_report', sep='\t')
 # Step 4:
 # Tracking Whi5 localization with manual annotation of datasets. Assumes you have run track_localization_final.py with
 # the above parameters (default is running this for scene 1).
-if os.path.exists(base_path+expt_path+'/scene_{0}/outputs/fl_loc_cells_scene_{0}.npy'.format(analyzed_scene)):
-    # If we have manually annotated datasets
-    if temp_df.loc[temp_df[temp_df.script == 'track_localization_manual_annotation'].index[0], 'run'] == 0:
-        # if this has not already been run
-        C.track_localization_manual_annotation(base_path, expt_path, image_filename, fl_filename, num_frames,
-                                               analyzed_scene, temp_threshold=threshold, temp_drange=drange,
-                                               temp_analyzed_frames=num_frames_analyzed, temp_label_path=label_path)
-        temp_df.loc[temp_df[temp_df.script == 'track_localization_manual_annotation'].index[0], 'run'] = 1
-        # update the progress report
-        print 'Manually annotated Whi5 localization data assembled'
-    else:  # if this has already been run
-        print 'Using previously assembled Manually annotated Whi5 localization'
+
+if os.path.exists(base_path+expt_path+'/whi5_analysis/completed_samples.npy'):
+    temp = np.load(base_path + expt_path + '/whi5_analysis/completed_samples.npy')
+    if np.sum(temp == 0) == 0:
+        # If we have manually annotated datasets
+        if temp_df.loc[temp_df[temp_df.script == 'track_localization_manual_annotation'].index[0], 'run'] == 0:
+            # if this has not already been run
+            C.track_localization_manual_annotation(base_path, expt_path, image_filename, fl_filename, num_frames,
+                                                   analyzed_scene, temp_threshold=threshold, temp_drange=drange,
+                                                   temp_analyzed_frames=num_frames_analyzed, temp_label_path=label_path)
+            temp_df.loc[temp_df[temp_df.script == 'track_localization_manual_annotation'].index[0], 'run'] = 1
+            # update the progress report
+            print 'Manually annotated Whi5 localization data assembled'
+        else:  # if this has already been run
+            print 'Using previously assembled Manually annotated Whi5 localization'
+    else:
+        print 'Unable to track Whi5 distribution: You must complete manually annotating a dataset first with track_localization_final.py. Exited and saved progress.'
+        temp_df.to_csv(base_path + expt_path + '/progress_report', sep='\t')
+        exit()
 else:
     print 'Unable to track Whi5 distribution: You must manually annotate a dataset first with track_localization_final.py. Exited and saved progress.'
     temp_df.to_csv(base_path+expt_path+'/progress_report', sep='\t')
