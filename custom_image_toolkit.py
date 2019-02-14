@@ -1156,6 +1156,8 @@ def track_localization_manual_annotation(temp_base_path, temp_expt_path, temp_im
                    for i0 in range(len(temp_frame_indexes))]  # frame numbers
     fluor_name = temp_image_filename + temp_fl_filename
     # drange = 65535.0
+    c1 = []  # this will be a list with all the cells from the training frames
+    y1 = []  # this will be the classification of cell type based on training data
     for i0 in range(len(temp_frame_indexes)):  # iterating through each frame
         dir1 = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_scenes[i0])
         # opening cell file
@@ -1180,9 +1182,11 @@ def track_localization_manual_annotation(temp_base_path, temp_expt_path, temp_im
         # num
         c, assignments = assign_labels_3(c, update_list, coords, temp_frames[i0])
         save_object(c, dir1 + '/cells_scene_{0}_v1.pkl'.format(temp_scenes[i0]))
+        c1 += [c[temp_ind1].fluor_chars[temp_frames[i0]-c[temp_ind1].frames[0]] for temp_ind1 in update_list]
+        y1 += [c[temp_ind1].nuclear_whi5[temp_frames[i0]-c[temp_ind1].frames[0]] for temp_ind1 in update_list]
         temp_new = [ind for ind in range(len(c)) if temp_frames[i0] in c[ind].frames and c[ind].nuclear_whi5[temp_frames[i0]-c[ind].frames[0]]]
-        if i0 == 0:
-            print temp_new, c[temp_new[0]].nuclear_whi5, temp_scenes[i0], temp_frames[i0], c[temp_new[0]].nuclear_whi5[temp_frames[i0]-c[temp_new[0]].frames[0]]
+        # if i0 == 0:
+        #     print temp_new, c[temp_new[0]].nuclear_whi5, temp_scenes[i0], temp_frames[i0], c[temp_new[0]].nuclear_whi5[temp_frames[i0]-c[temp_new[0]].frames[0]]
             # exit()
         # organizing figure data
         temp_im = io.imread(
@@ -1217,6 +1221,8 @@ def track_localization_manual_annotation(temp_base_path, temp_expt_path, temp_im
         fig.subplots_adjust(left=0)
         fig.savefig(directory +
                     '/images/whi5_assignments_scene_{0}_frame_{1}.tif'.format(temp_scenes[i0], temp_frames[i0]))
+    np.save(directory + '/training_cells.npy', np.asarray(c1))
+    np.save(directory + '/training_cells_labels.npy', np.asarray(y1))
 
 
 def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename, temp_num_frames,
@@ -1233,50 +1239,15 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
                    for i0 in range(len(temp_frame_indexes))]  # frame numbers
     if not os.path.exists(temp_dir + '/plots'):
         os.makedirs(temp_dir + '/plots')
-    temp1 = [[], [], []]  # G1 cells
-    temp2 = [[], [], []]  # G2 cells
-    for i0 in range(len(temp_frame_indexes)):
-        # print temp_scenes[i0], temp_frames[i0]
-        directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_scenes[i0])
-        with open(directory + '/cells_scene_{0}_v1.pkl'.format(temp_scenes[i0]), 'rb') as input:
-            c = pickle.load(input)
-        c1, c2, c3, c4, c5, c6 = [], [], [], [], [], []
-        # temp_tester = np.sum([1 for obj in c if temp_frames[i0] in obj.frames and obj.nuclear_whi5[temp_frames[i0]-obj.frames[0]]==1])
-        # temp_tester1 = np.load(temp_dir+'/fl_loc_centres/scene_{0}_frame_{1}.npy'.format(temp_scenes[i0], temp_frames[i0]))
-        # print 'number of appropriate cells', temp_tester, temp_tester1.shape
-        # print c[0].nuclear_whi5[temp_scenes[i0]- c[0].frames[0]], c[0].nuclear_whi5, temp_frames[i0] in c[0].frames,c[0].nuclear_whi5[temp_frames[i0]-c[0].frames[0]]
-        # exit()
-        for obj in c:
-            # print obj.nuclear_whi5[temp_frames[i0]-obj.frames[0]]
-            if (temp_frames[i0] in obj.frames) and obj.nuclear_whi5[temp_frames[i0]-obj.frames[0]]==1:
-                temp_ind = temp_frames[i0]-obj.frames[0]
-                # print 'here', i0, obj.fluor_chars[temp_ind]
-                # exit()
-                c1.append(obj.fluor_chars[temp_ind])
-                c2.append(obj.index)
-                c3.append(obj.frames[temp_ind])
-            elif (temp_frames[i0] in obj.frames) and obj.nuclear_whi5[temp_frames[i0] - obj.frames[0]] == 0:
-                temp_ind = temp_frames[i0] - obj.frames[0]
-                c4.append(obj.fluor_chars[temp_ind])
-                c5.append(obj.index)
-                c6.append(obj.frames[temp_ind])
-        # print len(c1)
-        temp1[0] += c1
-        temp1[1] += c2
-        temp1[2] += c3
-        temp2[0] += c4
-        temp2[1] += c5
-        temp2[2] += c6
-        # print len(temp1[0])
-        # exit()
+    X = np.load(temp_dir + '/training_cells.npy')
+    y = np.load(temp_dir + '/training_cells_labels.npy')
     lower_bound = 0.01
-
+    inds1 = np.nonzero(y)
+    inds2 = np.nonzero(y == 0)
     for i0 in range(len(fluor_chars_names)):
-
-        v1 = zip(*temp1[0])[i0]
-        v2 = zip(*temp2[0])[i0]
-        print v1[0], len(v1)
-        # print np.mean(v2)
+        v1 = X[inds1, i0]
+        v2 = X[inds2, i0]
+        print v1.shape
         make_dist_plots_1 = 1
         if make_dist_plots_1:
             fig = plt.figure(figsize=[5, 5])
@@ -1303,56 +1274,8 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
     plt.legend()
     fig.savefig(temp_dir + '/plots/skewness_bounding')
 
-    #####
-    # making initial plots of single cell distributions. Deprecated since we no longer store this level of detailed
-    # information.
-    make_dist_plots = 0
-    if make_dist_plots:
-        import seaborn as sns
-        inds = [np.random.randint(0, len(temp2[0]), size=10), np.random.randint(0, len(temp1[0]), size=10)]
-        labels = ['Whi5 non-nuclear localized', 'Whi5 nuclear localized']
-        for i0 in range(2):
-            for ind1 in inds[i0]:
-                # print ind
-                fig = plt.figure(figsize=[5, 5])
-                plt.xlabel('Whi5 fluorescence intensity')
-                plt.title(labels[i0])
-                if i0 == 1:
-                    sns.distplot(temp1[0][ind1], label='cell # {0}, frame # {1}'.format(temp1[1][ind1], temp1[2][ind1]))
-                    plt.legend()
-                    fig.savefig(
-                        directory + '/plots/G1_{0}_cell_{1}_frame_{2}'.format(i0, temp1[1][ind1], temp1[2][ind1]))
-                else:
-                    sns.distplot(temp2[0][ind1], label='cell # {0}, frame # {1}'.format(temp2[1][ind1], temp2[2][ind1]))
-                    plt.legend()
-                    fig.savefig(
-                        directory + '/plots/G1_{0}_cell_{1}_frame_{2}'.format(i0, temp2[1][ind1], temp2[2][ind1]))
-
-        for i0 in range(2):
-            for ind1 in inds[i0]:
-                # print ind
-                fig = plt.figure(figsize=[5, 5])
-                plt.xlabel('Whi5 fluorescence intensity')
-                plt.title(labels[i0])
-                if i0 == 1:
-                    sns.distplot(temp1[0][ind1] / np.mean(temp1[0][ind1]),
-                                 label='cell # {0}, frame # {1}'.format(temp1[1][ind1], temp1[2][ind1]))
-                    plt.legend()
-                    fig.savefig(
-                        directory + '/plots/norm_G1_{0}_cell_{1}_frame_{2}'.format(i0, temp1[1][ind1], temp1[2][ind1]))
-                else:
-                    sns.distplot(temp2[0][ind1] / np.mean(temp2[0][ind1]),
-                                 label='cell # {0}, frame # {1}'.format(temp2[1][ind1], temp2[2][ind1]))
-                    plt.legend()
-                    fig.savefig(
-                        directory + '/plots/norm_G1_{0}_cell_{1}_frame_{2}'.format(i0, temp2[1][ind1], temp2[2][ind1]))
-    #####
-
     ##### THIS PART NEEDS TO CHANGE TO IMPLEMENT MACHINE LEARNING
     temp_clf = SVC(kernel="linear", C=0.025)  # linear svm for classification
-    y1, y2 = np.ones(len(temp1[0])), np.zeros(len(temp2[0]))  # the values for whether cells have Whi5 nuclear localzn
-    y = np.concatenate((y1, y2))
-    X = np.array(temp1[0]+temp2[0])  # data for the relevant variables
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5, random_state=42)
     temp_clf.fit(X_train, y_train)
     score = temp_clf.score(X_test, y_test)
@@ -1404,7 +1327,7 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
                                 (c[ind1].nuclear_whi5[
                                      frame_num - c[ind1].frames[0]])]  # store the centroids of the correct cells.
             # plotting figures
-            fig = plt.figure(figsize=[5.12, 5.12], frameon=False)
+            fig = plt.figure(figsize=[10.0, 10.0], frameon=False)
             ax = plt.Axes(fig, [0., 0., 1., 1.])
             ax.set_axis_off()
             fig.add_axes(ax)
@@ -1422,8 +1345,8 @@ def analyze_whi5_distribution(temp_base_path, temp_expt_path, temp_image_filenam
     for i0 in range(len(temp_frame_indexes)):
         directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(temp_scenes[i0])
         name = '/automated_whi5_assignments_frame_{0}.tif'.format(temp_frames[i0])
-        copyfile(directory+'/images'+name, temp_dir+'/images'+name)  # so that we can compare them directly
-            # exit()
+        copyfile(directory+'/images'+name, temp_dir+'/images'+'/whi5_assignments_scene_{0}_frame_{1}_auto.tif'.format(temp_scenes[i0], temp_frames[i0]))
+        # so that we can compare them directly
 
 
 def assign_troublesome_pair(temp_posn, temp_frame_num, temp_dir, temp_cell_num, temp_scene):
