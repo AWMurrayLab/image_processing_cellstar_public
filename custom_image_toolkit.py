@@ -339,7 +339,8 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
     temp = skimage.feature.blob_log(temp_im1, min_sigma=1.0, max_sigma=2.5, num_sigma=4, threshold=0.002, overlap=0.01,
                                     log_scale=False)  # this has the format of a numpy array Nx4, where the columns are
     # z, y, x, r where r is the radius of the circle centered at that point
-
+    # now we go through the set of cells in the current timepoint and determine which ones have this x,y point inside.
+    temp_yx = set(zip(*[temp[:,1],temp[:,2]]))  # list of coordinates in type tuple
     for temp_ind in frame_list:
         i0 = temp_cells[temp_ind].frames.index(current_frame)
         if current_frame != temp_cells[temp_ind].frames[i0]:
@@ -349,6 +350,9 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
 
         # saving relevant fluorescence statistics
         temp_coords = temp_cells[temp_ind].segment_coords[i0]
+        temp_blobs = list(set(zip(*[temp_coords[:,0],temp_coords[:,1]]))&temp_yx)  # the list of coordinates that are in
+        #  both temp_coords and temp_yx
+
         temp_chars = list([])
         temp_chars.append(scipy.stats.skew(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]].flatten()))
         # skew
@@ -369,6 +373,11 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
             # segmented pixels
             temp_cells[temp_ind].pixel_thresh_fluor_vals[i0] =\
                 np.sum(temp_im[temp_cells[temp_ind].pixel_thresh_coords[i0]])
+    for temp_ind in range(temp.shape[0]):  # for each blob
+        possible_cells = [temp_ind1 for temp_ind1 in range(len(frame_list)) if list(temp[temp_ind, 1:3]) in temp_coords[temp_ind1]]
+        # this gives us the list of possible cells for matching each blob
+        if len(possible_cells==1):
+            temp_cells[possible_cells[0]].nuclear_coords[] = temp[temp_ind, :]
     print('Number of cells = {0}'.format(temp_ind))
     return temp_cells, temp_mask
 
