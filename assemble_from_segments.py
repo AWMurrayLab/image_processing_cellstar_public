@@ -202,7 +202,6 @@ size_thresh = False  # do we remove the largest cells?
 zstep = 0.7  # distance between z steps
 tstep = 10.0
 
-
 # saving the experimental parameters so we can just load them in future.
 
 expt_params = {'scale':scale, 'base_path':base_path, 'expt_path':expt_path, 'image_filename':image_filename,

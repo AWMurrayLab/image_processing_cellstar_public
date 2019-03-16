@@ -225,6 +225,13 @@ def keypress(event):
         line.set_ydata(y_pts)
         fig.canvas.draw()
         print 'Removed last added point (x, y) =', temp
+    elif val == 'h':
+        print 'Left click to annotate a cell'
+        print 'h = help'
+        print 'q = quit'
+        print 'f = move forward one frame'
+        print 'b = remove the last seed'
+        print 'e = enter editing mode'
     elif val == 'q':  # if we want to quit the analysis partway through
         print('Exiting')
         exit()
