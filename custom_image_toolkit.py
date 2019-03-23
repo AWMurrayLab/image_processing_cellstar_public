@@ -80,7 +80,6 @@ class Cell(object):
         self.nuclear_fluor_av.append(np.nan)
         self.cytoplasmic_fluor_av.append(np.nan)
         self.cytoplasmic_fluor_int.append(np.nan)
-        self.cytoplasmic_fluor_int.append(np.nan)
         self.nuclear_fluor_int_c2.append(np.nan)
         self.nuclear_fluor_av_c2.append(np.nan)
         self.cytoplasmic_fluor_int_c2.append(np.nan)
@@ -127,6 +126,17 @@ class CellCycle(object):
         self.nuclear_coords = [temp_cell.nuclear_coords[temp_ind] for temp_ind in temp_parameters['range']]
         self.nuclear_fluor_int = [temp_cell.nuclear_fluor_int[temp_ind] for temp_ind in temp_parameters['range']]
         self.nuclear_fluor_av = [temp_cell.nuclear_fluor_av[temp_ind] for temp_ind in temp_parameters['range']]
+        self.cytoplasmic_fluor_av = [temp_cell.cytoplasmic_fluor_av[temp_ind] for temp_ind in temp_parameters['range']]
+        self.cytoplasmic_fluor_int = [temp_cell.cytoplasmic_fluor_int[temp_ind] for temp_ind in temp_parameters['range']]
+        self.nuclear_fluor_int_c2 = [temp_cell.nuclear_fluor_int_c2[temp_ind] for temp_ind in
+                                      temp_parameters['range']]
+        self.nuclear_fluor_av_c2 = [temp_cell.nuclear_fluor_av_c2[temp_ind] for temp_ind in
+                                     temp_parameters['range']]
+        self.cytoplasmic_fluor_int_c2 = [temp_cell.cytoplasmic_fluor_int_c2[temp_ind] for temp_ind in
+                                    temp_parameters['range']]
+        self.cytoplasmic_fluor_av_c2 = [temp_cell.cytoplasmic_fluor_av_c2[temp_ind] for temp_ind in
+                                    temp_parameters['range']]
+
         # print [len(obj) for obj in self.pixel_thresh_coords], self.data_origin, self.cell_index, self.frames
         self.pixel_thresh_vol = []
         for temp_ind in temp_parameters['range']:
@@ -389,8 +399,9 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
     fig.subplots_adjust(right=1)
     fig.subplots_adjust(left=0)
 
-    # now we go through the set of cells in the current timepoint and determine which ones have this x,y point inside.
     temp_yx = zip(*[temp[:, 1], temp[:, 2]])  # list of coordinates in type tuple
+    # now we go through the set of cells in the current timepoint and determine which ones have this x,y point inside,
+    # in addition to determining the fluorescence within each cell and storing that.
     for temp_ind in frame_list:
         i0 = temp_cells[temp_ind].frames.index(current_frame)
         # gives the index for the current frame in that cell's history
@@ -398,7 +409,8 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
         #     print(i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames)
         #     raise ValueError('Wrong frame selected')
 
-        temp_coords = temp_cells[temp_ind].segment_coords[i0]  # the segmented coordinates
+        temp_coords = temp_cells[temp_ind].segment_coords[i0]  # the segmented coordinates. NOTE OVERWRITING TEMP_COORDS
+        # FROM EARLIER. NO LONGER OUTLINES, NOW FULL 2D CELL MASK COORDS.
         # saving relevant fluorescence statistics
         temp_chars = list([])
         # print temp_coords
@@ -442,7 +454,7 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
                 np.arange(np.maximum(temp_deets[2] - np.sqrt(3) * temp_deets[3], 0),
                 np.minimum(temp_deets[2] + np.sqrt(3) * temp_deets[3], temp_im.shape[2])).astype(int))
 
-            # gives the list of coordinates within the sphere centered at the middle of the BLOBBY BLOB MONSTER
+            # gives the list of coordinates within the sphere centered at the middle of the current blob
             coord_scaled = zip(Z.ravel(), Y.ravel(), X.ravel())
             temp_coords1 = [a for a in coord_scaled if np.linalg.norm(a - temp_deets[:3])<np.sqrt(3)*temp_deets[3]]
             coord_scaled1 = zip(*temp_coords1)  # this is what we will use to calculate the relevant values
@@ -457,9 +469,9 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
                 # cytoplasmic coordinates for this cell in format ([z], [y], [x]) that can be fed directly into np array
                 # Calculating the cytoplasmic fluorescence values for this cell, both fluorescence channels
                 temp_cells[temp_ind].cytoplasmic_fluor_int[i0] = np.sum(temp_im[temp_coords2])
-                temp_cells[temp_ind].cytoplasmic_fluor_int[i0] = np.mean(temp_im[temp_coords2])
+                temp_cells[temp_ind].cytoplasmic_fluor_av[i0] = np.mean(temp_im[temp_coords2])
                 temp_cells[temp_ind].cytoplasmic_fluor_int_c2[i0] = np.sum(temp_im_c2[temp_coords2])
-                temp_cells[temp_ind].cytoplasmic_fluor_int_c2[i0] = np.mean(temp_im_c2[temp_coords2])
+                temp_cells[temp_ind].cytoplasmic_fluor_av_c2[i0] = np.mean(temp_im_c2[temp_coords2])
                 # The majority of healthy cells have their nuclei almost completely contained within pixel_thresh_coords
                 # at least within the first timepoint.
                 # print temp_coords2
@@ -912,6 +924,12 @@ def integrate_bud_data(temp_cycles):
             obj.segment_coords_bud = []
             obj.segment_vol_bud = []
             obj.bud_seg = []
+            # Note that by definition we should not incorporate any bud data regarding cytoplasm vs nucleus, because
+            # even if a blob is detected within a bud, while it remains classified as a bud, we have not marked a
+            # localization event for Whi5. We therefore assume that any "nuclear detection" from a blob detection will
+            # be erroneous. As such, all fluorescence within the bud should be calculated based on the
+            # segment_fl_bud (both channels).
+
             for temp_ind in range(len(obj.frames)):
                 obj.zproj_fl_bud.append(0)
                 obj.vbud.append(0)
@@ -1159,6 +1177,7 @@ def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filen
                                                  bkgd=bkgd_ims[frame_num - 1], save_coords=False,
                                                  exists_c2=temp_fl_filename_c2, temp_outlines=outlines,
                                                       temp_im_c2=temp_fl_image_c2)
+            del temp_fl_image_c2  # Now the c2 data has been fully integrated into cells we can remove it from memory
             fig.savefig(directory+'/images/spot_detection_s{0}_t{1}.TIF'.format(scene, frame_num))
             io.imsave(directory + '/images/mask3d_s{0}_t{1}.TIF'.format(str(scene), str(frame_num)), mask)
             del mask
@@ -1170,6 +1189,7 @@ def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filen
 def populate_cells_all_scenes_2_v2(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename,
                                    temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_bkgd_details=None,
                                    temp_sel_scenes=None):
+    # NOTE: AS OF 3/21/19 THIS HAS NOT BEEN UPDATED TO MATCH populate_cells_all_scenes_2
     # This was previously the same as populate_cells_all_scenes_2 with the difference that it allows one to not have a
     # separate background frame, but to instead define a set of coordinates in a single scene to calculate the
     # background from. To do this, temp_bkgd_details should have the format [scene_num, [xmin, xmax], [ymin, ymax]].
