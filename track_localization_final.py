@@ -196,6 +196,9 @@ def onclick(event):
         temp_min_ind = np.argmin(temp_distances)  # index of the coordinate corresponding to the point in question
         temp_coords = coords[temp_min_ind]
         del coords[temp_min_ind], x_pts[temp_min_ind], y_pts[temp_min_ind]
+        line.set_xdata(x_pts)
+        line.set_ydata(y_pts)
+        fig.canvas.draw()
         print 'Removed point (x,y) =', temp_coords
     return coords
 

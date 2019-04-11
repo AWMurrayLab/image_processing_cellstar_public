@@ -23,6 +23,7 @@ from shutil import copyfile
 from skimage import feature
 from skimage import filters
 
+
 # helper
 fluor_chars_names = ['Skew', 'CV', 'Gini']
 
@@ -416,7 +417,7 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
         # print temp_coords
         temp_chars.append(scipy.stats.skew(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]].flatten()))
         # skew
-        temp_chars.append(scipy.stats.variation(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]].flatten()))
+        temp_chars.append(np.std(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]].flatten())/np.absolute(np.mean(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]].flatten())))
         # CV
         temp_chars.append(gini(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]]))  # Gini coefficient
         # print temp_chars
@@ -2046,3 +2047,696 @@ def filter_cycles(temp_base_path, temp_expt_path, temp_scale, temp_size_thresh=N
     save_object(temp_cycles1, temp_base_path + temp_expt_path + '/cell_cycles_filtered.pkl')
     print 'Number of high quality cell cycles: {0}'.format(len(temp_cycles1))
     return temp_cycles1
+
+
+########################################################################################################################
+# SINGLE TIMEPOINT EXPERIMENTAL ANALYSIS FROM HERE ON
+########################################################################################################################
+
+
+def timepoint_populate_cells_all_scenes_1(temp_base_path, temp_expt_paths, temp_expt_conds, temp_image_filenames,
+                                          temp_bf_filename, temp_completed_scenes, temp_num_scenes, temp_df):
+    # first we need to generate brightfield cells for each brightfield image
+
+    # to be run from timepoint_analysis.py
+    # temp_base_path is base path
+    # temp_expt_paths is expt_paths
+    # temp_expt_conds is expt_conds
+    # temp_image_filenames is image_filenames
+    # temp_bf_filename is bf_filename
+    # temp_completed_scenes is completed_scenes
+    color_seq_val = plt.cm.tab10(np.linspace(0.0, 1.0, 11))
+    dims = 512
+
+    for i0 in range(len(temp_image_filenames)):
+        temp1 =temp_df.loc[temp_df.script == 'timepoint_populate_cells_all_scenes_1', 'run_{0}'.format(i0)][0]
+        if temp_completed_scenes[i0] and temp1==0:
+            c = []  # this will track all the cells over this condition
+            # making necessary directory tree
+            directory = temp_base_path + temp_expt_paths[i0] + '/outputs'
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            if not os.path.exists(directory + '/images'):
+                os.makedirs(directory + '/images')
+            if not os.path.exists(directory + '/images/bf_segments'):
+                os.makedirs(directory + '/images/bf_segments')
+            if not os.path.exists(directory + '/images/spot_detection'):
+                os.makedirs(directory + '/images/spot_detection')
+            outlines = np.zeros([temp_num_scenes[i0], dims, dims])
+            for frame_num in range(1, temp_num_scenes[i0]+1):
+                filename = temp_image_filenames[i0] + temp_bf_filename + '_s{0}_segmentation.mat'.format(
+                    str(frame_num).zfill(3))
+                path = temp_base_path + temp_expt_paths[i0] + '/bf_ims/segments' + filename
+                c, im, fig, temp_outlines = timepoint_single_frame(path, c, frame_num, color_seq_val)
+                outlines[frame_num - 1, :, :] = temp_outlines[:, :]
+                fig.subplots_adjust(bottom=0)
+                fig.subplots_adjust(top=1)
+                fig.subplots_adjust(right=1)
+                fig.subplots_adjust(left=0)
+                # extent = mpl.transforms.Bbox(((0, 0), (5, 5)))
+                fig.savefig(directory + '/images/bf_segments/scene_{0}.tif'.format(frame_num))
+                del im, fig
+            np.save(directory + '/cell_outlines', outlines)
+            save_object(c, directory + '/cells.pkl')
+            del c
+            temp_df.at[temp_df.script=='timepoint_populate_cells_all_scenes_1','run_{0}'.format(i0)]=1
+            print temp_df
+    return temp_df
+
+
+def timepoint_single_frame(temp_path, temp_cells, temp_frame, color_seq):
+    # This function takes an existing set of cells, temp_cells, and will append cells from a given frame to them.
+    # temp_path is the path of the .mat file with segments that is output automatically for each field of view from
+    # cell star. temp_frame is an index for the frame number in question (starts from 1). tracking_csv is the path of
+    # the tracking .csv file output by cellstar automatically. color_seq is the range of values in the color map.
+
+    temp_im = sio.loadmat(temp_path)['segments']
+    temp1 = np.amax(temp_im)
+    # print temp1  # number of segmented cells in this image
+    fig = plt.figure(figsize=[5.12, 5.12], frameon=False)  # note figsize is selected to scale with that of the image
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    temp_im1 = np.zeros(temp_im.shape)
+    # plt.imshow(temp_im)
+    temp_coords = []
+    temp_outlines = np.zeros(temp_im.shape)
+    for i0 in range(1, temp1 + 1):  # this just indexes the cells in the image, not the unique cell identifier
+        temp2 = temp_im == i0  # go through sequentially
+        # calculating ellipse behavior
+        temp_val = fit_ellipse(temp2.astype(int))
+        temp_coords.append(temp_val[4])
+        temp4 = {}
+        temp4['index'] = len(temp_cells)  # unique cell identifier in the order it was appended to the list of cells
+        temp4['index_image'] = i0  # cell identifier in that image
+        temp4['file_centroid'] = None  # placeholder
+        temp4['segment_coords'] = temp_val[5]
+        temp4['centroid'] = np.array(temp_val[3])
+        temp4['current_frame'] = temp_frame  # adding the current frame index
+        temp4['ellipse_params'] = temp_val[:4]
+        temp4['ellipse_volume'] = math.pi * temp_val[0] * temp_val[1] ** 2
+        temp4['2d_area'] = np.sum(temp2)  # gives the total number of pixels in the 2d plane
+        temp_cells.append(Cell(temp4))  # adding a new cell
+        temp_im1[temp4['segment_coords'][:, 0], temp4['segment_coords'][:, 1]] = temp4['index']
+        # making the plot of cell values
+    ax.imshow(temp_im1)
+    for coords in temp_coords:
+        temp_x, temp_y = zip(*coords)
+        plt.plot(list(temp_x), list(temp_y), color=(1.0, 1.0, 1.0, 1.0))
+        temp_inds1 = [i for i, e in enumerate(temp_y) if 0 > int(round(e)) or int(round(e)) > 511]
+        temp_inds2 = [i for i, e in enumerate(temp_x) if 0 > int(round(e)) or int(round(e)) > 511]
+        excl_inds = list(set(temp_inds1 + temp_inds2))
+        # print excl_inds
+        corr_inds = [i0 for i0 in range(len(temp_x)) if not (i0 in excl_inds)]
+        # print corr_inds
+        temp_x1 = [int(round(temp_x[i0])) for i0 in corr_inds]
+        temp_y1 = [int(round(temp_y[i0])) for i0 in corr_inds]
+        # print temp_outlines.shape
+        temp_outlines[temp_y1, temp_x1] = 1
+    plt.xlim(-0.5, 511.5)
+    plt.ylim(511.5, -0.5)
+    return temp_cells, ax, fig, temp_outlines
+
+
+def timepoint_populate_cells_all_scenes_2(temp_base_path, temp_expt_paths, temp_expt_conds, temp_image_filenames,
+                                          temp_bf_filename, temp_completed_scenes, temp_num_scenes, temp_bkgd_scenes,
+                                          temp_fl_filename, temp_fl_filename_c2, temp_thresh, temp_df):
+    # this takes the cell output from script populate_cells_1.py and adds fluorescence data to it for both channels
+    # temp_fl_filename_c2 is the filename of the secondary fluorescence channel (primary corresponds to Whi5).
+    pixel_size = {'60X': 0.267, '100X': 0.16}
+    z_scale, z_offset = 0.4 / pixel_size['60X'], 0
+
+    color_seq_val = plt.cm.tab10(np.linspace(0.0, 1.0, 11))
+    generate_masks = True
+    bkgd_ims, bkgd_ims_c2 = [], [[], []]  #bkgd_ims_c2 has mean and then std_deviation. Note this stores it for all conds
+    # loading backgrounds
+    for cond in range(len(temp_image_filenames)):
+        temp1 = temp_df.loc[temp_df.script == 'timepoint_populate_cells_all_scenes_2', 'run_{0}'.format(cond)][1]
+        if temp_completed_scenes[cond] and temp1==0:  # if we have analyzed this scene
+            filename_fl_bkgd = temp_image_filenames[cond] + temp_fl_filename_c2 + '_s{0}.TIF'.format(str(temp_bkgd_scenes[cond]))
+            # channel 2
+            # format is z, y, x
+            temp_bkgd_im = io.imread(temp_base_path + temp_expt_paths[cond] + filename_fl_bkgd)
+            bkgd_ims_c2[0].append(np.mean(temp_bkgd_im, axis=0))
+            bkgd_ims_c2[1].append(np.std(temp_bkgd_im, axis=0))
+            del temp_bkgd_im
+            # channel 1
+            filename_fl_bkgd = temp_image_filenames[cond] + temp_fl_filename + '_s{0}.TIF'.format(str(temp_bkgd_scenes[cond]))
+            # format is z, y, x
+            temp_bkgd_im = io.imread(temp_base_path + temp_expt_paths[cond] + filename_fl_bkgd)
+            bkgd_ims.append(np.mean(temp_bkgd_im, axis=0))
+            # redefining the background image to be the mean along the z axis
+            del temp_bkgd_im
+
+            # loading appropriate data for each condition
+            directory = temp_base_path + temp_expt_paths[cond] + '/outputs'
+            with open(directory + '/cells.pkl', 'rb') as input:
+                c = pickle.load(input)
+            frame_list = [obj.frames[0] for obj in c]  # gives the appropriate scene for each cell in c
+            for obj in c:
+                obj.add_fluor_placeholders()
+            outlines = np.load(directory + '/cell_outlines.npy')
+            for frame_num in range(1, temp_num_scenes[cond]+1):
+                print 'scene = {0}'.format(frame_num)
+                update_list=[i for i, e in enumerate(frame_list) if e==frame_num]
+                # gives the list of indices that have to be addressed at each frame
+                temp_fl_image_c2 = None  # placeholder for the bkgd subtracted C2 fluor image
+                # Adding the fluorescence data for the second channel. We do this because the second channel is the one with
+                # the strong constitutive fluor.
+                filename_fl = temp_image_filenames[cond] + temp_fl_filename_c2 + '_s{0}.TIF'.format(str(frame_num))
+                # taking the mean with respect to the z axis. Do it this way since there doesn't seem
+                # to be any systematic bias in that direction.
+                c, figs, temp_masks, temp_fl_image_c2 = timepoint_add_fluorescence_traces_c2_v1(
+                    temp_path=temp_base_path + temp_expt_paths[cond] + filename_fl,
+                    temp_cells=c, frame_list=update_list, current_frame=frame_num,
+                    mean_bkgd=bkgd_ims_c2[0][-1],
+                    std_bkgd=bkgd_ims_c2[1][-1])
+                # saving the figures in figs. This is only necessary if you want to track how good the segmentation is
+                # since it saves a separate image for each cell.
+                del figs, temp_masks
+                filename_fl = temp_image_filenames[cond] + temp_fl_filename + '_s{0}.TIF'.format(str(frame_num))
+
+                c, mask, fig = timepoint_add_fluorescence_traces_v2(temp_path=temp_base_path + temp_expt_paths[cond] + filename_fl, temp_cells=c,
+                                                     frame_list=update_list,
+                                                     current_frame=frame_num, z_scaling=z_scale, z_offset=z_offset,
+                                                     bkgd=bkgd_ims[-1], save_coords=False,
+                                                     exists_c2=temp_fl_filename_c2, temp_outlines=outlines,
+                                                          temp_im_c2=temp_fl_image_c2, temp_thresh=temp_thresh,
+                                                                    temp_cond=cond)
+                del temp_fl_image_c2  # Now the c2 data has been fully integrated into cells we can remove it from memory
+                fig.savefig(directory+'/images/spot_detection/spot_detection_s{0}.TIF'.format(frame_num))
+                del mask
+                print 'done condition '+temp_expt_conds[cond][1:]+', scene {0}'.format(frame_num)
+                # if frame_num>1:
+                #     print c[update_list[0]].fluor_chars, update_list[0]
+            save_object(c, directory + '/cells_fl.pkl')
+            del c, frame_list
+            temp_df.at[temp_df.script == 'timepoint_populate_cells_all_scenes_2', 'run_{0}'.format(cond)] = 1
+            print temp_df
+
+
+def timepoint_add_fluorescence_traces_c2_v1(temp_path, temp_cells, frame_list, current_frame, mean_bkgd, std_bkgd):
+    # v1 differs from the base by also analyzing different ways of segmenting cell volume based on fluorescence
+    # This function adds the z-projected fluorescence above and below the 2d cell segmentation for a second fluorescence
+    # channel c2
+    temp_im = io.imread(temp_path)
+    temp_mask = temp_im > np.tile(mean_bkgd + 3 * std_bkgd, [temp_im.shape[0], 1, 1])
+    # generating the high pixel density mask
+    temp_im1 = temp_im - mean_bkgd  # subtracting average background at each pixel value.
+    figs = []
+    temp_masks = []
+    for temp_ind in frame_list:
+        temp_binary_image = np.zeros(temp_im.shape)
+        i0 = 0  # only one frame stored for each cell in a timepoint expt
+        if current_frame != temp_cells[temp_ind].frames[i0]:
+            print temp_ind, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames
+            raise ValueError('Wrong frame selected')
+        temp_coords = temp_cells[temp_ind].segment_coords[i0]
+        temp_cells[temp_ind].zproj_fluor_vals_c2[i0] = np.sum(temp_im1[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # calculating the full z projection
+
+        # Generating the fluorescence and volume value integrated only over pixels where the fluorescence is high. Note
+        # we will also do this for Whi5, since the nucleus appears to be included in the constitutive fluor channel, so
+        # this should give a slightly more accurate measure for Whi5 fluorescence.
+        # while the vacuoles are excluded for both
+        temp_binary_image[:, temp_coords[:, 0], temp_coords[:, 1]] = 1
+        temp_binary_image *= temp_mask
+        temp_cells[temp_ind].pixel_thresh_coords[i0] = np.nonzero(temp_binary_image)
+        temp_cells[temp_ind].pixel_thresh_fluor_vals_c2[i0] = \
+            np.sum(temp_im1[temp_cells[temp_ind].pixel_thresh_coords[i0]])
+        temp_masks.append(temp_binary_image)
+    return temp_cells, figs, temp_masks, temp_im1
+
+
+def timepoint_add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd,
+                               save_coords=False, exists_c2=None, temp_outlines=None, temp_im_c2=None,
+                                         temp_thresh=None, temp_cond=None):
+    # This is the timepoint version of add_fluorescence_traces_v2
+    # We extract relevant characteristics from the fluorescence distribution such as the skewness, genie coefficient and
+    # standard deviation for the cell classification.
+    # z_scaling is deprecated but gives the ratio of the z stepsize in um to the x,y pixel size in um.
+    # temp_outlines gives the outlines in format [y,x]
+    # temp_im_c2 is still available at this stage to allow us to include data for the secondary channel in the nucleus
+    temp_im1 = io.imread(temp_path)
+    temp_im = temp_im1 - np.tile(bkgd, [temp_im1.shape[0], 1, 1])
+    # subtracting the average background at each xy point. Structure is (z,y,x)
+    temp_mask = np.zeros(temp_im.shape)  # this will be a binary mask to track the location of each cell
+    # finding the blobs
+    temp_im2 = skimage.filters.gaussian(temp_im1, sigma=1)
+    temp = skimage.feature.blob_log(temp_im2, min_sigma=1.0, max_sigma=2.5, num_sigma=4, threshold=temp_thresh[temp_cond], overlap=0.01,
+                                    log_scale=False)  # this has the format of a numpy array Nx4, where the columns are
+    # z, y, x, r where r is the radius of the circle centered at that point
+    # now we plot the fitted blobs along with the outlines of the cells at this timepoint
+    fig = plt.figure(figsize=[10,10])
+    ax = plt.subplot(1, 1, 1)
+    plt.imshow(np.amax(temp_im2, axis=0))
+    # plotting the cell outlines in white
+    temp_coords = np.nonzero(temp_outlines[current_frame-1, :, :])
+    plt.plot(temp_coords[1], temp_coords[0], '.', markersize=1, color=(1.0, 1.0, 1.0, 1.0))  # plotting in format x,y
+    del temp_im2, temp_coords
+    # plotting the circles of each blob
+    for blob in temp:
+        #     print blob
+        z, y, x, r = blob
+        c = plt.Circle((x, y), np.sqrt(3) * r, color='r', linewidth=2, fill=False)
+        ax.add_patch(c)
+    fig.subplots_adjust(bottom=0)
+    fig.subplots_adjust(top=1)
+    fig.subplots_adjust(right=1)
+    fig.subplots_adjust(left=0)
+
+    temp_yx = zip(*[temp[:, 1], temp[:, 2]])  # list of coordinates in type tuple
+    # now we go through the set of cells in the current timepoint and determine which ones have this x,y point inside,
+    # in addition to determining the fluorescence within each cell and storing that.
+    for temp_ind in frame_list:
+        i0 = temp_cells[temp_ind].frames.index(current_frame)  # should be zero
+        # gives the index for the current frame in that cell's history
+        # if current_frame != temp_cells[temp_ind].frames[i0]:
+        #     print(i0, current_frame, temp_cells[temp_ind].frames[i0], temp_cells[temp_ind].frames)
+        #     raise ValueError('Wrong frame selected')
+
+        temp_coords = temp_cells[temp_ind].segment_coords[i0]  # the segmented coordinates. NOTE OVERWRITING TEMP_COORDS
+        # FROM EARLIER. NO LONGER OUTLINES, NOW FULL 2D CELL MASK COORDS.
+        # saving relevant fluorescence statistics
+        temp_chars = list([])
+        # print temp_coords
+        temp_chars.append(scipy.stats.skew(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]].flatten()))
+        # skew
+        temp_chars.append(np.std(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]].flatten())/np.absolute(np.mean(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]].flatten())))
+        # CV
+        temp_chars.append(gini(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]]))  # Gini coefficient
+        # print temp_chars
+        temp_cells[temp_ind].fluor_chars[i0] = temp_chars
+        # print temp_cells[temp_ind].fluor_chars
+        # exit()
+        # generating a list of fluorescence values to get good statistics. Note image formatting with z, y, x.
+        temp_cells[temp_ind].zproj_fluor_vals[i0] = np.sum(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
+        # calculating the full z projection as well.
+        for temp2 in temp_coords:
+            temp_mask[:, temp2[1], temp2[0]] = 1  # storing these coordinates in a binary array
+        if not (exists_c2 is None):  # if we have the data then we have to also add fluorescence integrated from
+            # pixels segmented with respect to the second fluorescence channel
+            temp_cells[temp_ind].pixel_thresh_fluor_vals[i0] = \
+                np.sum(temp_im[temp_cells[temp_ind].pixel_thresh_coords[i0]])
+
+        # Saving whether there was a blob inside the current cell and if so what its coords were
+        temp_blobs = list(
+            set(zip(*[temp_coords[:, 0], temp_coords[:, 1]])) & set(temp_yx))  # the list of coordinates that are in
+        # both temp_coords and temp_yx. This gives the list of all blobs whose centers lie within the current cell
+        # being considered.
+
+        # code = coords of the one blob OR None if no blobs or more than one blob
+        if len(temp_blobs) == 1:  # if there is exactly one blob within the current cell
+            temp_deets = temp[temp_yx.index(temp_blobs[0]), :]
+            # Saving the fluorescence within the nucleus. This part is computationally intensive but would require a lot of
+            # work to generate something more effective
+
+            # generating a cuboid grid around the center of the blob
+            Z, Y, X = np.meshgrid(
+                np.arange(np.maximum(temp_deets[0] - np.sqrt(3)*temp_deets[3], 0),
+                          np.minimum(temp_deets[0] + np.sqrt(3)*temp_deets[3], temp_im.shape[0])).astype(int),
+                np.arange(np.maximum(temp_deets[1] - np.sqrt(3) * temp_deets[3], 0),
+                np.minimum(temp_deets[1] + np.sqrt(3) * temp_deets[3], temp_im.shape[1])).astype(int),
+                np.arange(np.maximum(temp_deets[2] - np.sqrt(3) * temp_deets[3], 0),
+                np.minimum(temp_deets[2] + np.sqrt(3) * temp_deets[3], temp_im.shape[2])).astype(int))
+
+            # gives the list of coordinates within the sphere centered at the middle of the current blob
+            coord_scaled = zip(Z.ravel(), Y.ravel(), X.ravel())
+            temp_coords1 = [a for a in coord_scaled if np.linalg.norm(a - temp_deets[:3])<np.sqrt(3)*temp_deets[3]]
+            coord_scaled1 = zip(*temp_coords1)  # this is what we will use to calculate the relevant values
+            temp_cells[temp_ind].nuclear_coords[i0] = temp_coords1  # saving the coordinates of the nucleus at this
+            # time point for use with the secondary fluorescence channel
+            temp_cells[temp_ind].nuclear_fluor_int[i0] = np.sum(temp_im[coord_scaled1])
+            temp_cells[temp_ind].nuclear_fluor_av[i0] = np.mean(temp_im[coord_scaled1])
+            if not(exists_c2 is None):  # trying to use this data to infer values about the cytoplasm of the cell
+                temp_cells[temp_ind].nuclear_fluor_int_c2[i0] = np.sum(temp_im_c2[coord_scaled1])  # nuclear fluor in c2
+                temp_cells[temp_ind].nuclear_fluor_av_c2[i0] = np.mean(temp_im_c2[coord_scaled1])  # nuclear fluor in c2
+                temp_coords2 = zip(*list(set(zip(*temp_cells[temp_ind].pixel_thresh_coords[i0])) - set(temp_coords1)))
+                # cytoplasmic coordinates for this cell in format ([z], [y], [x]) that can be fed directly into np array
+                # Calculating the cytoplasmic fluorescence values for this cell, both fluorescence channels
+                temp_cells[temp_ind].cytoplasmic_fluor_int[i0] = np.sum(temp_im[temp_coords2])
+                temp_cells[temp_ind].cytoplasmic_fluor_av[i0] = np.mean(temp_im[temp_coords2])
+                temp_cells[temp_ind].cytoplasmic_fluor_int_c2[i0] = np.sum(temp_im_c2[temp_coords2])
+                temp_cells[temp_ind].cytoplasmic_fluor_av_c2[i0] = np.mean(temp_im_c2[temp_coords2])
+                # The majority of healthy cells have their nuclei almost completely contained within pixel_thresh_coords
+                # at least within the first timepoint.
+                # print temp_coords2
+                # print 'Full list', temp_coords1
+                # print zip(*temp_cells[temp_ind].pixel_thresh_coords[i0])
+                # print temp_coords
+    # print('Number of cells = {0}'.format(len(frame_list)))
+    return temp_cells, temp_mask, fig
+
+
+# (temp_base_path, temp_expt_paths, temp_expt_conds, temp_image_filenames,
+#                                           temp_bf_filename, temp_completed_scenes, temp_num_scenes, temp_bkgd_scenes,
+#                                           temp_fl_filename, temp_fl_filename_c2)
+
+def timepoint_track_localization_manual_annotation(temp_base_path, temp_expt_paths, temp_expt_conds,
+                                                   temp_image_filenames, temp_completed_scenes, temp_fl_filename,
+                                                   temp_threshold, temp_drange, temp_df=None):
+    # Note: Ensure that timepoint_track_localization_final.py has run successfully with the correct parameters prior to running
+    # this script.
+    # this function takes the annotated datasets for Whi5 localization and integrates it into the cell data, so that
+    # cells are labeled as containing Whi5 in the correct timepoints. This is then fed into analyze_whi5_distribution.
+    # temp_analyzed_scene was previously the scene number that was annotated to give ground truth for Whi5 localization.
+    # Now deprecated.
+    # temp_num_frames is the number of frames analyzed in temp_analyzed_scene.
+
+    for cond in range(len(temp_expt_conds)):
+        # print temp_df.loc[temp_df.script == 'timepoint_track_localization_manual_annotation', 'run_{0}'.format(cond)]
+        temp1 = temp_df.loc[temp_df.script == 'timepoint_track_localization_manual_annotation', 'run_{0}'.format(cond)][2]
+        if temp_completed_scenes[cond] and temp1==0:
+            directory = temp_base_path + temp_expt_paths[cond] + '/outputs/whi5_analysis'
+            temp_frame_indexes = np.load(directory + '/samples.npy')  # gives the indices of all the analyzed frames.
+            # print temp_frame_indexes, len(temp_frame_indexes)
+            # scene numbers
+            fluor_name = temp_image_filenames[cond] + temp_fl_filename
+            # drange = 65535.0
+            c1 = []  # this will be a list with all the cells from the training frames
+            y1 = []  # this will be the classification of cell type based on training data
+
+            dir1 = temp_base_path + temp_expt_paths[cond] + '/outputs'
+            # opening cell file
+            temp_loading_path = dir1 + '/cells_fl.pkl'
+            with open(temp_loading_path, 'rb') as input:
+                c = pickle.load(input)
+            frame_list = [obj.frames[0] for obj in c]
+            outlines = np.load(dir1 + '/cell_outlines.npy')
+            # print c[34].fluor_chars
+            for i0 in range(len(temp_frame_indexes)):  # iterating through each frame that we have considered
+                # loading cell outlines to confirm assignments
+                update_list = [i for i, e in enumerate(frame_list) if e == temp_frame_indexes[i0]]
+                # indices of all cells that are in the current frame
+                # tracked centroids in format x, y
+                temp = np.load(
+                    directory + '/fl_loc_centres/scene_{0}.npy'.format(temp_frame_indexes[i0]))
+                # gives the coordinate list of all annotated cells in the current frame
+                coords = zip(temp[:, 0], temp[:, 1])  # format=(x,y)
+
+                # print coords, update_list
+                # print coords, temp
+                # coords now stores the coordinates of cell center points for the analyzed scene, given the current frame
+                # num
+                # print [c[temp_ind1].pixel_thresh_fluor_vals[temp_frame_indexes[i0] - c[temp_ind1].frames[0]] for temp_ind1 in update_list]
+                c, assignments = timepoint_assign_labels_3(c, update_list, coords, temp_frame_indexes[i0])
+                # print [c[temp_ind1].pixel_thresh_fluor_vals[temp_frame_indexes[i0] - c[temp_ind1].frames[0]] for temp_ind1 in
+                #        update_list]
+                # exit()
+                save_object(c, dir1 + '/cells_v1.pkl')
+                c1 += [c[temp_ind1].fluor_chars[temp_frame_indexes[i0] - c[temp_ind1].frames[0]] for temp_ind1 in update_list]
+                # print c1
+                y1 += [c[temp_ind1].nuclear_whi5[temp_frame_indexes[i0] - c[temp_ind1].frames[0]] for temp_ind1 in update_list]
+                # print y1
+                temp_new = [ind for ind in range(len(c)) if
+                            temp_frame_indexes[i0] in c[ind].frames and c[ind].nuclear_whi5[temp_frame_indexes[i0] - c[ind].frames[0]]]
+
+                # organizing figure data
+                temp_im = io.imread(
+                    temp_base_path + temp_expt_paths[cond] + fluor_name + '_s{0}.TIF'.format(temp_frame_indexes[i0]))
+                temp_im1 = temp_im / temp_drange
+                # print temp_im.shape
+                if np.sum(temp_im > temp_threshold) > 0:
+                    temp_im1 = np.log(np.amax(temp_im1, axis=0) / np.amax(temp_im1))
+                    # using a log scale in this case because this image contains the frustrating high energy pixels that
+                    # sometimes crop up
+                else:
+                    temp_im1 = np.amax(temp_im1, axis=0) / np.amax(temp_im1)
+
+                temp_im1 *= outlines[temp_frame_indexes[i0] - 1, :, :] == 0
+                temp_im1 += outlines[temp_frame_indexes[i0] - 1, :, :].astype('uint16')
+                # print c[ind].frames
+                temp_cell_coords = [c[ind].position[temp_frame_indexes[i0] - c[ind].frames[0]] for ind in update_list
+                                    if c[ind].nuclear_whi5[temp_frame_indexes[i0] - c[ind].frames[0]] == 1]
+                # store the centroids of the correct cells.
+
+                # plotting figures
+                fig = plt.figure(figsize=[10, 10], frameon=False)
+                ax = plt.Axes(fig, [0., 0., 1., 1.])
+                ax.set_axis_off()
+                fig.add_axes(ax)
+                ax.imshow(temp_im1)
+                temp_x, temp_y = zip(*temp_cell_coords)
+                plt.plot(temp_x, temp_y, 'x', color='r', linestyle='None')
+                fig.subplots_adjust(bottom=0)
+                fig.subplots_adjust(top=1)
+                fig.subplots_adjust(right=1)
+                fig.subplots_adjust(left=0)
+                fig.savefig(directory +
+                            '/images/whi5_assignments_scene_{0}.tif'.format(temp_frame_indexes[i0]))
+            np.save(directory + '/training_cells.npy', np.asarray(c1))
+            np.save(directory + '/training_cells_labels.npy', np.asarray(y1))
+            temp_df.at[temp_df.script == 'timepoint_track_localization_manual_annotation', 'run_{0}'.format(cond)] = 1
+            print temp_df
+
+
+def timepoint_assign_labels_3(temp_cells, temp_inds, temp_coords, temp_frame_num):
+    # we expect that each coordinate in temp_coords should lie within a cell outline in temp_cells
+    # temp_coords should be given as a list of tuples in (x,y) format
+    # temp_inds should be a list of coordinates in temp_cells for cells which are present at this timestep, denoted by
+    # temp_frame_num
+
+    temp_labels = []
+    temp_vals = []
+
+    temp_timepoints = []  # temp_timepoints corresponds to the current timepoint in each cell's reference frame
+    assignments_made = []  # this will detail which cells this point fits within
+    for i0 in temp_inds:
+        temp_timepoints.append(temp_cells[i0].frames.index(temp_frame_num))
+        # gives the index at which this frame sits for the cell in question
+        if temp_cells[i0].frames[temp_timepoints[-1]] != temp_frame_num:  # confirming that this is the correct index
+            print temp_frame_num, temp_timepoints[-1], temp_cells[i0].frames
+            raise ValueError('Wrong cells')
+
+    # print temp_inds, temp_coords
+    for temp_ind1 in range(len(temp_coords)):
+
+        temp_comparison = []
+
+        # assessing the scaled distance between the coordinate and the ellipse in question
+        for i0 in range(len(temp_inds)):
+            temp_params = temp_cells[temp_inds[i0]].ellipse_fit[temp_timepoints[i0]]
+            if ellipse_contains_point(temp_params, temp_coords[temp_ind1]):
+                temp_comparison.append(i0)  # this point has been classified to fall within the current ellipse.
+
+        if len(temp_comparison) > 1:  # if this point fits within more than one ellipse we take the one with the closest
+            # centroid
+            ind = compare_distances(temp_cells, temp_comparison, temp_coords[temp_ind1], temp_timepoints)
+            assignments_made.append(ind)
+            temp_cells[temp_inds[ind]].nuclear_whi5[temp_timepoints[ind]] = 1  # this cell has Whi5 nuclear localized.
+        else:
+            ind = temp_comparison[0]
+            temp_cells[temp_inds[ind]].nuclear_whi5[temp_timepoints[ind]] = 1  # this cell has Whi5 nuclear localized.
+        assignments_made.append(ind)
+    return temp_cells, assignments_made
+
+
+#(temp_base_path, temp_expt_paths, temp_expt_conds,
+                                                   #temp_image_filenames, temp_completed_scenes, temp_fl_filename,
+                                                   #temp_threshold, temp_drange)
+
+def timepoint_analyze_whi5_distribution(temp_base_path, temp_expt_paths, temp_expt_conds, temp_image_filenames, temp_completed_scenes,
+                                        temp_fl_filename, temp_num_scenes, temp_threshold, temp_drange, temp_df):
+    import seaborn as sns
+    # temp_label_path determines whether we use the output from populate_cells_all_scenes_3 or 2.
+    for cond in range(len(temp_expt_conds)):
+        temp1 = temp_df.loc[temp_df.script == 'timepoint_analyze_whi5_distribution', 'run_{0}'.format(cond)][3]
+        if temp_completed_scenes[cond] and temp1==0:
+            temp_dir = temp_base_path + temp_expt_paths[cond] + '/outputs/whi5_analysis'
+            temp_scenes = np.load(temp_dir + '/samples.npy')  # gives the indices of all the analyzed frames.
+            # scene numbers
+            if not os.path.exists(temp_dir + '/plots'):
+                os.makedirs(temp_dir + '/plots')
+            if not os.path.exists(temp_base_path + temp_expt_paths[cond] + '/outputs/images/auto_whi5_detection'):
+                os.makedirs(temp_base_path + temp_expt_paths[cond] + '/outputs/images/auto_whi5_detection')
+            X = np.load(temp_dir + '/training_cells.npy')
+            y = np.load(temp_dir + '/training_cells_labels.npy')
+            print cond, X
+            # print X.shape, y.shape
+            # exit()
+            lower_bound = 0.01
+            inds1 = np.nonzero(y)
+            inds2 = np.nonzero(y == 0)
+            for i0 in range(len(fluor_chars_names)):
+                v1 = X[inds1, i0]
+                v2 = X[inds2, i0]
+                print v1.shape
+                make_dist_plots_1 = 1
+                if make_dist_plots_1:
+                    fig = plt.figure(figsize=[5, 5])
+                    sns.distplot(v1, label='Nuclear')
+                    sns.distplot(v2, label='Cytoplasmic')
+                    plt.legend()
+                    plt.xlabel(fluor_chars_names[i0])
+                    plt.title(fluor_chars_names[i0] + ' in manually annotated cell populations')
+                    fig.savefig(temp_dir + '/plots/' + fluor_chars_names[i0])
+                    del fig
+
+            fig = plt.figure(figsize=[5, 5])
+            kde = scipy.stats.gaussian_kde(v1)
+            kde1 = scipy.stats.gaussian_kde(v2)
+            xpoints = np.linspace(-2.0, 5.0, 100)
+            vals = [kde.integrate_box_1d(low=-10, high=lim) for lim in xpoints]
+            sel = [i for i, e in enumerate(vals) if e > lower_bound]
+            skew_cutoff = xpoints[sel[0]]
+            plt.axvline(x=xpoints[sel[0]], label='99% bound = {0}'.format(str(np.round(skew_cutoff, decimals=3))))
+            print kde1.integrate_box_1d(low=skew_cutoff, high=10.0)
+            plt.plot(xpoints, kde.evaluate(xpoints), label='Nuclear')
+            plt.plot(xpoints, kde1.evaluate(xpoints), label='Cytoplasmic')
+            plt.plot(xpoints, vals, label='Nuclear CDF')
+            plt.legend()
+            fig.savefig(temp_dir + '/plots/skewness_bounding')
+
+            ##### THIS PART NEEDS TO CHANGE TO IMPLEMENT MACHINE LEARNING
+            temp_clf = SVC(kernel="linear", C=0.025)  # linear svm for classification
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.5, random_state=42)
+            temp_clf.fit(X_train, y_train)
+            score = temp_clf.score(X_test, y_test)
+            print "Learning algorithm score on test data:", score
+            y_test_pred = temp_clf.predict(X_test)
+            out = summary_statistics(y_test_pred, y_test)
+            print 'Accuracy, Sensitivity, Specificity'
+            print np.around(out, 4)
+
+            directory = temp_base_path + temp_expt_paths[cond] + '/outputs'
+            temp_loading_path = directory + '/cells_fl.pkl'
+            with open(temp_loading_path, 'rb') as input:
+                c = pickle.load(input)
+            c = automated_whi5_assignment_2(c, temp_clf)  # ML classifier
+            # c = automated_whi5_assignment_1(c, skew_cutoff)  # skewness cutoff classifier
+            save_object(c, directory + '/cells_v2.pkl')
+            # producing plots to ensure that this tracking is adequate
+            outlines = np.load(directory + '/cell_outlines.npy')
+            frame_list = [obj.frames for obj in c]
+            # organizing figure data
+            for scene in range(1, temp_num_scenes[cond]+1):
+                # checking which cells to look at for this timepoint
+                temp2 = [(scene in temp1) for temp1 in frame_list]
+                update_list = [i for i, e in enumerate(temp2) if e != 0]
+                # loading image
+                temp_im = io.imread(
+                    temp_base_path + temp_expt_paths[cond] + temp_image_filenames[cond] + temp_fl_filename + '_s{0}.TIF'.format(
+                        str(scene)))
+                temp_im1 = temp_im / temp_drange
+                if np.sum(temp_im > temp_threshold) > 0:
+                    temp_im1 = np.log(np.amax(temp_im1, axis=0) / np.amax(temp_im1))
+                    # using a log scale in this case because this image contains the frustrating high energy pixels that
+                    # sometimes crop up
+                else:
+                    temp_im1 = np.amax(temp_im1, axis=0) / np.amax(temp_im1)
+                temp_im1 *= outlines[scene - 1, :, :] == 0
+                temp_im1 += outlines[scene - 1, :, :].astype('uint16')
+                temp_cell_coords = [c[ind1].position[scene - c[ind1].frames[0]] for ind1 in update_list if
+                                    (c[ind1].nuclear_whi5[
+                                         scene - c[ind1].frames[0]])]  # store the centroids of the correct cells.
+                # plotting figures
+                fig = plt.figure(figsize=[10.0, 10.0], frameon=False)
+                ax = plt.Axes(fig, [0., 0., 1., 1.])
+                ax.set_axis_off()
+                fig.add_axes(ax)
+                ax.imshow(temp_im1, cmap='viridis')
+                if len(temp_cell_coords) > 0:
+                    temp_x, temp_y = zip(*temp_cell_coords)
+                    plt.plot(temp_x, temp_y, '.', markersize=4, color='r', linestyle='None')
+                else:
+                    print 'No cells in G1 during scene {0}'.format(scene)
+                fig.subplots_adjust(bottom=0)
+                fig.subplots_adjust(top=1)
+                fig.subplots_adjust(right=1)
+                fig.subplots_adjust(left=0)
+                fig.savefig(directory + '/images/auto_whi5_detection/frame_{0}.tif'.format(scene))
+            for i0 in range(len(temp_scenes)):
+                directory = temp_base_path + temp_expt_paths[cond] + '/outputs'
+                name = '/frame_{0}.tif'.format(temp_scenes[i0])
+                copyfile(directory + '/images/auto_whi5_detection' + name,
+                         temp_dir + '/images' + '/whi5_assignments_scene_{0}_auto.tif'.format(temp_scenes[i0]))
+                # so that we can compare them directly
+            temp_df.at[temp_df.script == 'timepoint_analyze_whi5_distribution', 'run_{0}'.format(cond)] = 1
+            print temp_df
+
+
+
+def timepoint_pandas_export(temp_base_path, temp_expt_paths, temp_expt_conds, temp_expt_id, temp_completed_scenes,
+                            temp_df):
+    # this function takes the whi5-assigned data and converts it into a convenient pandas array
+    # loading our cells
+    temp_ind = 0
+    dfs=[]
+    volume_element = 0.267**2*0.7  # number of microns cubed per pixel
+    for cond in range(len(temp_expt_conds)):
+        temp1 = temp_df.loc[temp_df.script == 'timepoint_pandas_export', 'run_{0}'.format(cond)][4]
+        if temp_completed_scenes[cond] and temp1==0:
+            directory = temp_base_path+temp_expt_paths[cond]+'/outputs'
+            temp_loading_path = directory + '/cells_v2.pkl'  # this version of cells has Whi5 annotations made
+            outline_set = set([0, 511])
+            with open(temp_loading_path, 'rb') as input:
+                c = pickle.load(input)
+            # Adding any additional variables we need
+            c1 = [obj for obj in c if not(set(zip(*obj.segment_coords[0])[0]).intersection(outline_set)) and
+                  not(set(zip(*obj.segment_coords[0])[1]).intersection(outline_set))]  # the list of cells that do not
+            # intersect the outline of the image
+            for obj in c1:
+                obj.pixel_thresh_vol = [len(obj.pixel_thresh_coords[0][0])*volume_element]
+                if obj.nuclear_coords[0] is None:
+                    obj.nuclear_vol = [np.nan]
+                else:
+                    obj.nuclear_vol = [len(obj.nuclear_coords[0])*volume_element]
+            print 'Total number of cells: ', len(c), 'Total number of non-edge cells: ', len(c1)
+            # print dir(c1[0])
+            # generating the column vectors
+            temp = dir(c1[0])[19:]  # this way we avoid all the inbuilt functions and we can just get the relevant variables
+            # now we will filter for variables that are numbers
+            # print temp
+            cols = []
+            for att in temp:
+                if type(getattr(c1[0], att)) is list:
+                    # print att, getattr(c1[0], att)
+                    if (type(getattr(c1[0], att)[0]) in set([np.int64, np.float, np.float64, float, int])):  # if this is
+                        # the right kind of variable for me (i.e. a scalar), let's get that bad boy into a pandas array
+                        cols.append(att)  # we save all the relevant variables in this way
+            for att in cols:
+                data_vals = [[getattr(obj, att)[0] for att in cols] for obj in c1]
+            cols.append('Strain')  # so that we can identify these cells
+            # print cols
+            df = pd.DataFrame(columns=cols)
+            for i in range(len(data_vals)):
+                df.loc[i] = data_vals[i]+[temp_expt_conds[cond][1:]]
+            # temp_ind += i
+            dfs.append(df)
+            # print df, 'hello'
+            # print df
+    df_new = pd.concat(dfs)
+    for cond in range(len(temp_expt_conds)):  # here we update both conditions simultaneously since it's not computation
+        # intensive and otherwise we have to do a lot of rejigging.
+        temp_df.at[temp_df.script == 'timepoint_pandas_export', 'run_{0}'.format(cond)] = 1
+        print temp_df
+    df_new.to_pickle('./expt_ids' + temp_expt_id + '.pkl')
+
+
+def timepoint_plot_distribution(temp_base_path, temp_expt_paths, temp_expt_conds, temp_image_filenames, temp_completed_scenes,
+                                        temp_fl_filename, temp_num_scenes, temp_threshold, temp_drange):
+    for cond in range(len(temp_expt_conds)):
+        if temp_completed_scenes[cond]:
+            temp_path = temp_base_path+temp_expt_paths[cond]+'/outputs/'
+            path = temp_base_path+temp_expt_paths[cond]+'/outputs/cells_v2.pkl'
+            with open(path, 'rb') as input:
+                c = pickle.load(input)
+            y = [obj.pixel_thresh_fluor_vals[0] for obj in c if obj.nuclear_whi5[0]]  # if whi5 is in the nucleus
+            z = [obj.pixel_thresh_fluor_vals_c2[0] for obj in c if obj.nuclear_whi5[0]]  # if whi5 is in the nucleus
+            x = [len(obj.pixel_thresh_coords[0][0]) for obj in c if obj.nuclear_whi5[0]]  # if whi5 is in the nucleus
+            fig=plt.figure(figsize=[10,5])
+            plt.title(temp_expt_conds[cond])
+            plt.subplot(1,2,1)
+            plt.plot(x, np.asarray(y)/np.asarray(x),'.', label='Whi5-mVenNB',alpha=0.5)
+            plt.xlabel('Volume')
+            plt.ylabel('Integrated fluorescence')
+            vals=scipy.stats.linregress(np.asarray(x),np.asarray(y)/np.asarray(x))
+            print 'Whi5 corr', vals[0]
+            plt.subplot(1, 2, 2)
+            plt.plot(x, np.asarray(z)/np.asarray(x), '.', label='Constitutive fluor', alpha=0.5)
+            vals = scipy.stats.linregress(x, np.asarray(z)/np.asarray(x))
+            print 'Const corr', vals[0]
+            plt.xlabel('Volume')
+            plt.ylabel('Integrated fluorescence')
+            plt.legend()
+            fig.savefig(temp_path+'fig_cond_{0}.png'.format(cond))
