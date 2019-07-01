@@ -364,7 +364,7 @@ def single_frame(temp_path, temp_cells, temp_frame, tracking_csv, color_seq):
 #     return temp_cells, temp_mask
 
 
-def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, bkgd,
+def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame, z_scaling, z_offset, temp_bf_mask,
                                save_coords=False, exists_c2=None, temp_outlines=None, temp_im_c2=None):
     # This is the updated version of add_fluorescence_traces_v1, where we only consider the fluorescence values in the
     # full z-stack. We no longer store the full fluorescence distribution either, instead extracting relevant
@@ -373,9 +373,10 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
     # temp_outlines gives the outlines in format [y,x]
     # temp_im_c2 is still available at this stage to allow us to include data for the secondary channel in the nucleus
     temp_im1 = io.imread(temp_path)
-    temp_im = temp_im1 - np.tile(bkgd, [temp_im1.shape[0], 1, 1])
+    temp_bf_mask = np.tile(temp_bf_mask, [temp_im1.shape[0], 1, 1])
+    bkgd = np.median(temp_im1[np.nonzero(temp_bf_mask==0)])  # gives the median background fluorescence value
+    temp_im = temp_im1 - bkgd
     # subtracting the average background at each xy point. Structure is (z,y,x)
-    temp_mask = np.zeros(temp_im.shape)  # this will be a binary mask to track the location of each cell
     # finding the blobs
     temp_im2 = skimage.filters.gaussian(temp_im1, sigma=1)
     temp = skimage.feature.blob_log(temp_im2, min_sigma=1.0, max_sigma=2.5, num_sigma=4, threshold=0.002, overlap=0.01,
@@ -427,8 +428,6 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
         # generating a list of fluorescence values to get good statistics. Note image formatting with z, y, x.
         temp_cells[temp_ind].zproj_fluor_vals[i0] = np.sum(temp_im[:, temp_coords[:, 0], temp_coords[:, 1]])
         # calculating the full z projection as well.
-        for temp2 in temp_coords:
-            temp_mask[:, temp2[1], temp2[0]] = 1  # storing these coordinates in a binary array
         if not (exists_c2 is None):  # if we have the data then we have to also add fluorescence integrated from
             # pixels segmented with respect to the second fluorescence channel
             temp_cells[temp_ind].pixel_thresh_fluor_vals[i0] = \
@@ -480,7 +479,7 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
                 # print zip(*temp_cells[temp_ind].pixel_thresh_coords[i0])
                 # print temp_coords
     print('Number of cells = {0}'.format(temp_ind))
-    return temp_cells, temp_mask, fig
+    return temp_cells, fig
 
 
 # def add_fluorescence_traces_c2(temp_path, temp_cells, frame_list, current_frame, bkgd):
@@ -500,17 +499,22 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
 #     return temp_cells
 
 
-def add_fluorescence_traces_c2_v1(temp_path, temp_cells, frame_list, current_frame, mean_bkgd, std_bkgd):
+def add_fluorescence_traces_c2_v1(temp_path, temp_cells, frame_list, current_frame, temp_bf_mask):
     # v1 differs from the base by also analyzing different ways of segmenting cell volume based on fluorescence
     # This function adds the z-projected fluorescence above and below the 2d cell segmentation for a second fluorescence
     # channel c2
     temp_im = io.imread(temp_path)
-    temp_mask = temp_im > np.tile(mean_bkgd + 3 * std_bkgd, [temp_im.shape[0], 1, 1])
+    temp_bf_mask = np.tile(temp_bf_mask, [temp_im.shape[0], 1, 1])
+    # print np.amax(temp_bf_mask), np.amin(temp_bf_mask), current_frame
+    temp_vals = temp_im[np.nonzero(temp_bf_mask==0)]
+    median_bkgd, std_bkgd = np.median(temp_vals), np.median(temp_vals)-np.percentile(temp_vals, 16)
+    temp_bkgd = median_bkgd + 4.0 * std_bkgd
+    temp_mask = temp_im > temp_bkgd
+    temp_bin1 = np.zeros(temp_im.shape)
     # generating the high pixel density mask
-    temp_im1 = temp_im - mean_bkgd  # subtracting average background at each pixel value.
+    temp_im1 = temp_im - median_bkgd  # subtracting average background measured over the whole image
     figs = []
-    temp_masks = []
-    for temp_ind in frame_list:
+    for temp_ind in frame_list:  # iterating through each cell to add the appropriate value
         temp_binary_image = np.zeros(temp_im.shape)
         i0 = temp_cells[temp_ind].frames.index(current_frame)
         # i0 = [i for i, e in enumerate(temp_cells[temp_ind].frames) if e == current_frame][0]
@@ -527,12 +531,16 @@ def add_fluorescence_traces_c2_v1(temp_path, temp_cells, frame_list, current_fra
         # this should give a slightly more accurate measure for Whi5 fluorescence.
         # while the vacuoles are excluded for both
         temp_binary_image[:, temp_coords[:, 0], temp_coords[:, 1]] = 1
+        temp_bin1+=temp_binary_image
         temp_binary_image *= temp_mask
         temp_cells[temp_ind].pixel_thresh_coords[i0] = np.nonzero(temp_binary_image)
         temp_cells[temp_ind].pixel_thresh_fluor_vals_c2[i0] = \
             np.sum(temp_im1[temp_cells[temp_ind].pixel_thresh_coords[i0]])
-        temp_masks.append(temp_binary_image)
-    return temp_cells, figs, temp_masks, temp_im1
+    temp_bin1=temp_bin1>0
+    temp_mask*=temp_bin1  # gives the cell segments in this frame
+    # plt.imshow(temp_mask[7, :, :])
+    # plt.show()
+    return temp_cells, figs, temp_mask, temp_im1
 
 
 def find_min_distance(temp_array, temp_centroid):
@@ -1109,47 +1117,33 @@ def populate_cells_all_scenes_1(temp_base_path, temp_expt_path, temp_image_filen
         del c
 
 
-def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename,
-                                temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_fl_filename_c2=None):
+def populate_cells_all_scenes_2(expt_id):
     # this takes the cell output from script populate_cells_1.py and adds fluorescence data to it
     # temp_fl_filename_c2 is the filename of the secondary fluorescence channel (primary corresponds to Whi5).
+    pickle_in = open("./expt_ids" + expt_id + '.pickle', "rb")
+    ep = pickle.load(pickle_in)  # this gives us the experimental parameters, so that we can load everything in an
+    # orderly fashion
     pixel_size = {'60X': 0.267, '100X': 0.16}
     z_scale, z_offset = 0.4 / pixel_size['60X'], 0
 
-    color_seq_val = plt.cm.tab10(np.linspace(0.0, 1.0, 11))
-    generate_masks = True
-    bkgd_ims, bkgd_ims_c2 = [], [[], []]
-    # loading backgrounds
-    for frame_num in range(1, max(temp_num_frames)):
-        # only want to do this once per frame since the background is the same for all scenes
-        # channel 2
-        filename_fl_bkgd = temp_image_filename + temp_fl_filename_c2 + \
-                           's{0}_t{1}.TIF'.format(str(temp_bkgd_scene), str(frame_num))
-        # format is z, y, x
-        temp_bkgd_im = io.imread(temp_base_path + temp_expt_path + filename_fl_bkgd)
-        bkgd_ims_c2[0].append(np.mean(temp_bkgd_im, axis=0))
-        bkgd_ims_c2[1].append(np.std(temp_bkgd_im, axis=0))
-        del temp_bkgd_im
-        # channel 1
-        filename_fl_bkgd = temp_image_filename + temp_fl_filename + 's{0}_t{1}.TIF'.format(str(temp_bkgd_scene),
-                                                                                           str(frame_num))
-        # format is z, y, x
-        temp_bkgd_im = io.imread(temp_base_path + temp_expt_path + filename_fl_bkgd)
-        bkgd_ims.append(np.mean(temp_bkgd_im, axis=0))
-        del temp_bkgd_im
-        # redefining the background image to be the mean along the z axis
-    # this will contain the mean and standard deviation for each frame (avoids having to re-do it every time)
+    temp_base_path, temp_expt_path, temp_image_filename, temp_fl_filename = ep['base_path'], ep['expt_path'], ep['image_filename'], ep['fl_filename']
+    temp_num_scenes, temp_num_frames, temp_bkgd_scene, temp_fl_filename_c2 = ep['num_scenes'], ep['num_frames'], ep['bkgd_scene'], ep['fl_filename_c2']
+    temp_bf_filename = ep['bf_filename']
+
     for scene in range(1, temp_num_scenes):
-        print 'scene = {0}'.format(scene)
         directory = temp_base_path + temp_expt_path + '/scene_{0}/outputs'.format(scene)
         with open(directory + '/cells_scene_{0}.pkl'.format(scene), 'rb') as input:
             c = pickle.load(input)
         frame_list = [obj.frames for obj in c]
-        update_list = []
         for obj in c:
             obj.add_fluor_placeholders()
         outlines = np.load(directory + '/cell_outlines_scene_{0}.npy'.format(scene))
+        print 'scene = {0}'.format(scene)
+        update_list = []
         for frame_num in range(1, temp_num_frames[scene - 1]):
+            # loading the brightfield mask to calculate background fluorescence values
+            bf_mask = io.imread(temp_base_path+temp_expt_path+'/scene_{0}/segments'.format(scene)+temp_image_filename + temp_bf_filename + 's{0}_t{1}_fgmask.png'.format(
+                str(scene), str(frame_num).zfill(2)))>0
             temp = [(frame_num in temp1) for temp1 in frame_list]
             update_list.append(
                 [i for i, e in enumerate(temp) if e != 0])  # gives the list of indices that have to be addressed
@@ -1162,26 +1156,26 @@ def populate_cells_all_scenes_2(temp_base_path, temp_expt_path, temp_image_filen
                                                                                                  str(frame_num))
                 # taking the mean with respect to the z axis. Do it this way since there doesn't seem
                 # to be any systematic bias in that direction.
-                c, figs, temp_masks, temp_fl_image_c2 = add_fluorescence_traces_c2_v1(
+                c, figs, temp_mask, temp_fl_image_c2 = add_fluorescence_traces_c2_v1(
                     temp_path=temp_base_path + temp_expt_path + filename_fl,
                     temp_cells=c, frame_list=update_list[-1], current_frame=frame_num,
-                    mean_bkgd=bkgd_ims_c2[0][frame_num - 1],
-                    std_bkgd=bkgd_ims_c2[1][frame_num - 1])
+                    temp_bf_mask = bf_mask)
+                temp_mask = temp_mask.astype('uint16')  # converting it to a format that FIJI can read
+                temp_mask *= 65535
+                io.imsave(directory + '/images/mask3d_s{0}_t{1}.TIF'.format(str(scene), str(frame_num)), temp_mask)
                 # saving the figures in figs. This is only necessary if you want to track how good the segmentation is
                 # since it saves a separate image for each cell.
-                del figs, temp_masks
+                del figs, temp_mask
             filename_fl = temp_image_filename + temp_fl_filename + 's{0}_t{1}.TIF'.format(str(scene), str(frame_num))
 
-            c, mask, fig = add_fluorescence_traces_v2(temp_path=temp_base_path + temp_expt_path + filename_fl, temp_cells=c,
+            c, fig = add_fluorescence_traces_v2(temp_path=temp_base_path + temp_expt_path + filename_fl, temp_cells=c,
                                                  frame_list=update_list[-1],
                                                  current_frame=frame_num, z_scaling=z_scale, z_offset=z_offset,
-                                                 bkgd=bkgd_ims[frame_num - 1], save_coords=False,
+                                                 temp_bf_mask = bf_mask, save_coords=False,
                                                  exists_c2=temp_fl_filename_c2, temp_outlines=outlines,
                                                       temp_im_c2=temp_fl_image_c2)
             del temp_fl_image_c2  # Now the c2 data has been fully integrated into cells we can remove it from memory
             fig.savefig(directory+'/images/spot_detection_s{0}_t{1}.TIF'.format(scene, frame_num))
-            io.imsave(directory + '/images/mask3d_s{0}_t{1}.TIF'.format(str(scene), str(frame_num)), mask)
-            del mask
             print 'done scene {0}, frame {1}'.format(scene, frame_num)
         save_object(c, directory + '/cells_fl_scene_{0}.pkl'.format(scene))
         del c, frame_list

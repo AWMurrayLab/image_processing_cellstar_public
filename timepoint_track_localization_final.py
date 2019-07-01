@@ -36,56 +36,104 @@ import os
 # tstep = 10.0
 
 
-# # ######################################### experiment_specific_information
+# ######################################### experiment_specific_information
 # timepoint experiment 3/22/19
-# date = '/190322'
-# expt_id = date+'_timepoint'
-# completed_scenes = [1, 0, 0, 1]  # which scenes I have finished image segmentation on
-# base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190322_yFB78_yFB79_CSM_Raff_Gal'
-# expt_conds = ['/yFB78_125uMGal', '/yFB78_800uMGal', '/yFB79_125uMGal', '/yFB79_800uMGal']
-# expt_paths = [expt_path1+cond for cond in expt_conds]
-# bkgd_scenes = [1, 1, 1, 101]  # the first scene is not always the bkgd
-# num_scenes = [101, 102, 102, 101]  # exact number of scenes to be analyzed
-# # number of frames including first background. Note some later frames have a second background
-# image_filenames = ['/190322_60X_yFB78_1XCSM_2Raff_125Gal_scene_',
-#                 '/190322_60X_yFB78_1XCSM_2Raff_800Gal _scene_',
-#                 '/190322_60X_yFB79_1XCSM_2XCSMpad_2Raff_125Gal_scene_',
-#                 '/190322_60X_yFB79_1XCSM_2Raff_800Gal_better_timing_scene_']
-# bf_filename = '_w1Brightfield confocal'
-# fl_filename = '_w2515 laser 30'
-# fl_filename_c2 = '_w3594 laser 30'
-# date = '/190322'
-# pixel_size = {'60X': 0.267, '100X': 0.16}
-# zstep = 0.7  # distance between z steps
-# drange = 65535.0  # image fluorescence maximum
-# prog_vec = [0, 0]
-# num_frames_analyzed=30
-# threshold = 10000
-
-# timepoint experiment 4/3/19
-date = '/190403'
+date = '/190322'
 expt_id = date+'_timepoint'
-completed_scenes = [1, 1]  # which scenes I have finished image segmentation on
-base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190403_yFB78_yFB79_CSM_Raff_timepoint'
-expt_conds = ['/yFB78_125uMGal', '/yFB79_125uMGal']
+completed_scenes = [0, 1, 0, 0]  # which scenes I have finished image segmentation on
+base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190322_yFB78_yFB79_CSM_Raff_Gal'
+expt_conds = ['/yFB78_125uMGal', '/yFB78_800uMGal', '/yFB79_125uMGal', '/yFB79_800uMGal']
 expt_paths = [expt_path1+cond for cond in expt_conds]
-bkgd_scenes = [1, 1]  # the first scene is not always the bkgd
-num_scenes = [101, 100]  # exact number of scenes to be analyzed
+bkgd_scenes = [1, 1, 1, 101]  # the first scene is not always the bkgd
+num_scenes = [101, 101, 102, 101]  # exact number of scenes to be analyzed
 # number of frames including first background. Note some later frames have a second background
-image_filenames = ['/190403_yFB78_2XCSM_2Raff_125uMGal_60X_timepoint',
-                '/190403_yFB79_2XCSM_2Raff_125uMGal_60X_timepoint']
+image_filenames = ['/190322_60X_yFB78_1XCSM_2Raff_125Gal_scene_',
+                '/190322_60X_yFB78_1XCSM_2Raff_800Gal _scene_',
+                '/190322_60X_yFB79_1XCSM_2XCSMpad_2Raff_125Gal_scene_',
+                '/190322_60X_yFB79_1XCSM_2Raff_800Gal_better_timing_scene_']
 bf_filename = '_w1Brightfield confocal'
 fl_filename = '_w2515 laser 30'
 fl_filename_c2 = '_w3594 laser 30'
-date = '/190403'
+date = '/190322'
 pixel_size = {'60X': 0.267, '100X': 0.16}
 zstep = 0.7  # distance between z steps
 drange = 65535.0  # image fluorescence maximum
-prog_vec = [0, 0, 0, 0]
+prog_vec = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
 num_frames_analyzed=30
 threshold = 10000
-thresh_blobs=0.003
+thresh_blobs=[0.007,0.05,0.007,0.007]
 
+# # timepoint experiment 4/3/19
+# date = '/190403'
+# expt_id = date+'_timepoint'
+# completed_scenes = [1, 1]  # which scenes I have finished image segmentation on
+# base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190403_yFB78_yFB79_CSM_Raff_timepoint'
+# expt_conds = ['/yFB78_125uMGal', '/yFB79_125uMGal']
+# expt_paths = [expt_path1+cond for cond in expt_conds]
+# bkgd_scenes = [1, 1]  # the first scene is not always the bkgd
+# num_scenes = [101, 100]  # exact number of scenes to be analyzed
+# # number of frames including first background. Note some later frames have a second background
+# image_filenames = ['/190403_yFB78_2XCSM_2Raff_125uMGal_60X_timepoint',
+#                 '/190403_yFB79_2XCSM_2Raff_125uMGal_60X_timepoint']
+# bf_filename = '_w1Brightfield confocal'
+# fl_filename = '_w2515 laser 30'
+# fl_filename_c2 = '_w3594 laser 30'
+# date = '/190403'
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# zstep = 0.7  # distance between z steps
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [0, 0, 0, 0]
+# num_frames_analyzed=30
+# threshold = 10000
+# thresh_blobs=0.003
+
+
+# # timepoint experiment 4/3/17
+# date = '/190417'
+# expt_id = date+'_timepoint'
+# completed_scenes = [1, 1]  # which scenes I have finished image segmentation on
+# base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190417_yFB78_79_CSM_Raff_timepoint'
+# expt_conds = ['/yFB78_125uMGal', '/yFB79_125uMGal']
+# expt_paths = [expt_path1+cond for cond in expt_conds]
+# bkgd_scenes = [1, 1]  # the first scene is not always the bkgd
+# num_scenes = [100, 100]  # exact number of scenes to be analyzed
+# # number of frames including first background. Note some later frames have a second background
+# image_filenames = ['/190417_yFB78_60X_timepoint_2XCSM_2Raff_125uMGal',
+#                 '/190417_yFB79_60X_timepoint_2XCSM_2Raff_125uMGal']
+# bf_filename = '_w1Brightfield confocal'
+# fl_filename = '_w2515 laser 30'
+# fl_filename_c2 = '_w3594 laser 30'
+# date = '/190417'
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# zstep = 0.7  # distance between z steps
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]  # one column for each condition
+# num_frames_analyzed = 30
+# threshold = 10000
+# thresh_blobs = [0.003, 0.003]
+
+# # timepoint experiment 800uM Gal 6/7/19
+# date = '/190607'
+# expt_id = date+'_timepoint'
+# completed_scenes = [1]  # which scenes I have finished image segmentation on
+# base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_800uMGal_timepoint'
+# expt_conds = ['/yFB78_800uMGal']
+# expt_paths = [expt_path1+cond for cond in expt_conds]
+# bkgd_scenes = [1]  # the first scene is not always the bkgd
+# num_scenes = [101]  # exact number of scenes to be analyzed
+# # number of frames including first background. Note some later frames have a second background
+# image_filenames = ['/190607_yFB78_60X_2XCSM_2Raff_800uMGal']
+# bf_filename = '_w1Brightfield confocal'
+# fl_filename = '_w2515 laser 30'
+# fl_filename_c2 = '_w3594 laser 30'
+# date = '/190607'
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# zstep = 0.7  # distance between z steps
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [[0, 0, 0, 0, 0]]  # one column for each condition
+# num_frames_analyzed = 30
+# threshold = 10000
+# thresh_blobs = [0.05]
 
 def onclick(event):
     ix, iy = event.xdata, event.ydata

@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import os
 
 # which experiment we want to plot
-expt_id = '/190403_timepoint'
+# expt_id = '/190403_timepoint'
 # expt_id = '/190322_timepoint'
+expt_id = '/190417_timepoint'
 
 # loading data
 pickle_in = open("./expt_ids"+expt_id+'.pkl',"rb")

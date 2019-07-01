@@ -134,13 +134,46 @@ import shutil
 # bf_base_name = '/181212_yFB7_60X_dex_fluor_maturation_CHX_timelapse_w1Brightfield confocal'
 # date = '/181212'
 
-# yFB7 CSM timelapse expt 181213_yFB7
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181213_yFB7_fluor_maturation/CSM_timelapse'
-num_scenes = 6
-bkgd_scene = 6  # the last scene is the background
-num_frames = 46
-bf_base_name = '/181212_yFB7_60X_dex_fluor_maturation_timelapse_w1Brightfield confocal'
-date = '/181212'
+# # yFB7 CSM timelapse expt 181213_yFB7
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181213_yFB7_fluor_maturation/CSM_timelapse'
+# num_scenes = 6
+# bkgd_scene = 6  # the last scene is the background
+# num_frames = 46
+# bf_base_name = '/181212_yFB7_60X_dex_fluor_maturation_timelapse_w1Brightfield confocal'
+# date = '/181212'
+
+# # yFB7 CSM timelapse expt 181213_yFB7
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190417_yFB79_timelapse/timelapse'
+# num_scenes = 19
+# bkgd_scene = 19  # the last scene is the background
+# num_frames = 70
+# bf_base_name = '/190417_yFB79_60X_timelapse_2XCSM_2Raff_125uMGal_10min_w1Brightfield confocal'
+# date = '/181212'
+
+# # yFB77 CSM timelapse expt 181220_yFB77
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181220_yFB77_CSM_Raff_Gal/timelapse'
+# num_scenes = 15
+# bkgd_scene = 15  # the last scene is the background
+# num_frames = 67
+# bf_base_name = '/181220_yFB77_60X_Raff_Gal_timelapse_w1Brightfield confocal'
+# date = '/181220'
+
+# # yFB78 CSM timelapse expt 190607_yFB78
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_timelapse/timelapse'
+# num_scenes = 13
+# bkgd_scene = 13  # the last scene is the background
+# num_frames = 60
+# bf_base_name = '/190607_yFB78_60X_2XCSM_2Raff_125uMGal2_w1Brightfield confocal'
+# date = '/190607'
+
+# yFB78 CSM timelapse expt 190606_yFB78
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190606_yFB78_timelapse/timelapse'
+num_scenes = 13
+bkgd_scene = 13  # the last scene is the background
+num_frames = 74
+bf_base_name = '/190606_yFB78_60X_2XCSM_2Raff_125uMGal_timelapse_w1Brightfield confocal'
+date = '/190606'
+
 
 bkgd_extension = '_s{0}_t{1}.TIF'.format(bkgd_scene, 1)
 
