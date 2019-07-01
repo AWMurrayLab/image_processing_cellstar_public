@@ -181,25 +181,17 @@ def onclick(event):
     ix, iy = event.xdata, event.ydata
     print 'x = %d, y = %d' % (
         ix, iy)
-    global coords
     if temp_editing == 0:  # if we are not in "editing mode"
         x_pts.append(ix)
         y_pts.append(iy)
         line.set_xdata(x_pts)
         line.set_ydata(y_pts)
         fig.canvas.draw()
+        global coords
         # coords.append(np.array([np.floor(ix), np.floor(iy)]).astype('int'))
         coords.append((np.floor(ix), np.floor(iy)))
-        print 'Added point (x, y) =', coords[-1]
     else:  # if we are in "editing mode"
-        temp_distances = np.linalg.norm(np.array(coords)-np.array([ix, iy]), axis=1)
-        temp_min_ind = np.argmin(temp_distances)  # index of the coordinate corresponding to the point in question
-        temp_coords = coords[temp_min_ind]
-        del coords[temp_min_ind], x_pts[temp_min_ind], y_pts[temp_min_ind]
-        line.set_xdata(x_pts)
-        line.set_ydata(y_pts)
-        fig.canvas.draw()
-        print 'Removed point (x,y) =', temp_coords
+        print 'Removed point (x,y) =', (ix, iy)
     return coords
 
 
@@ -218,38 +210,38 @@ def keypress(event):
         temp = np.zeros([len(x_vals), 2])
         temp[:, 0] = x_vals[:]
         temp[:, 1] = y_vals[:]
-        # print temp
         np.save(directory+'/fl_loc_centres/'+'scene_{0}_frame_{1}'.format(scene, frame_num), temp)
     elif val == 'b':
         temp = coords.pop()
         x_pts.pop()
         y_pts.pop()
         line.set_xdata(x_pts)
-        line.set_ydata(y_pts)
+        line.set_ydatba(y_pts)
         fig.canvas.draw()
-        print 'Removed last added point (x, y) =', temp
-    elif val == 'h':
-        print 'Left click to annotate a cell'
-        print 'h = help'
-        print 'q = quit'
-        print 'f = move forward one frame'
-        print 'b = remove the last seed'
-        print 'e = enter editing mode'
+        print temp
     elif val == 'q':  # if we want to quit the analysis partway through
         print('Exiting')
         exit()
     elif val == 'e':  # if we want to enter "editing" mode
-        global temp_editing
-        temp_editing = np.mod(temp_editing + 1, 2)
+        temp_editing = np.mod(temp_editing + 1, 1)
         if temp_editing == 1:
             print 'Entered editing mode. Click on or near a point to remove it.'
         elif temp_editing == 0:
             print 'Exited editing mode. Click to add a cell.'
+    # elif val == 'b':
+    #     temp = coords.pop()
+    #     x_pts.pop()
+    #     y_pts.pop()
+    #     line.set_xdata(x_pts)
+    #     line.set_ydata(y_pts)
+    #     fig.canvas.draw()
+    #     print temp
+    # elif val == 'q':
     return coords
 
 
 coords = []
-global ax, temp_im, fig, scene, x_pts, y_pts, directory, frame_num, directory1, temp_scenes1, temp_scenes, temp_editing
+global ax, temp_im, fig, scene, x_pts, y_pts, directory, frame_num, directory1, coord_vals, temp_scenes1, temp_scenes, temp_editing
 temp_editing = 0
 # scene = analyzed_scene  # we want to get data for the first scene
 directory = base_path+expt_path+'/whi5_analysis'
@@ -261,26 +253,30 @@ if not os.path.exists(directory+'/images'):
 if os.path.exists(directory+'/samples.npy'):  # we pick up based on what has been done already
     temp_scenes = np.load(directory+'/samples.npy').tolist()
     temp_scenes1 = np.load(directory+'/completed_samples.npy')
+    coord_vals = np.load(directory + '/fl_loc_cells.npy')
     if len(temp_scenes) > num_frames_analyzed:
         raise ValueError('Cannot proceed since you are trying to analyze fewer frames than have already been analyzed')
 else:
     temp_scenes = []
     temp_scenes1 = np.zeros(num_frames_analyzed)
+    coord_vals = np.zeros([0,3])
 temp_new = np.random.randint(low=0, high=np.sum(num_frames)+1, size=1)  # randomly selecting which scenes we consider
 while len(temp_scenes) < num_frames_analyzed:  # we
     if not(temp_new[0] in temp_scenes):  # making sure we don't have any repeats
         temp_scenes.append(temp_new[0])
     temp_new = np.random.randint(low=0, high=np.sum(num_frames)+1, size=1)
+coord_list = []
 indexing = [int(np.sum(num_frames[:i0])) for i0 in range(0, len(num_frames))]
 print 'Keep going until scene number', num_frames_analyzed
 i0 = 0
 if np.sum(temp_scenes1 == 0) == 0:
     i1 = num_frames_analyzed # in this case we have nothing left to do
     print 'All frames already analyzed'
+    exit()
 else:
     i1 = np.nonzero(temp_scenes1 == 0)[0][0]
-for temp_ind in temp_scenes:
-    print 'REACHED SCENE {0} OUT OF {1}'.format(temp_scenes.index(temp_ind), num_frames_analyzed)
+    i0 = i1  # so that we start from this scene
+for temp_ind in temp_scenes[i1:]:
     # picking which scene and frame we are considering here
     scene = np.searchsorted(indexing, temp_ind, side='right')
     frame_num = temp_ind - indexing[scene-1] + 1
@@ -298,34 +294,40 @@ for temp_ind in temp_scenes:
         temp_im1 = np.amax(temp_im1, axis=0) / np.amax(temp_im1)
     temp_im1 *= outlines[frame_num-1, :, :] == 0
     temp_im1 += outlines[frame_num-1, :, :].astype('uint16')
-    if os.path.exists(directory+'/fl_loc_centres/'+'scene_{0}_frame_{1}.npy'.format(scene, frame_num)):  # if we already
-        # have data on this frame then we do not need
-        temp_vals = np.load(directory+'/fl_loc_centres/'+'scene_{0}_frame_{1}.npy'.format(scene, frame_num))
-        coords = zip(*[temp_vals[:, 0], temp_vals[:, 1]])
-        x_pts = list(temp_vals[:, 0])  # starting the points off correctly
-        y_pts = list(temp_vals[:, 1])
-        del temp_vals
-    else:  # if we have no data on this frame
-        coords = []
-        x_pts = []
-        y_pts = []
+    coords = []
     # filename = '/scene_{0}/outputs/images/frame_{1}.tif'.format(scene, frame)
     # temp_im = io.imread(base_path+expt_path+filename)
-    # print coords
     fig = plt.figure(figsize=[10, 10], frameon=False)
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
     fig.add_axes(ax)
     ax.imshow(temp_im1)
     # variable for the points
+    x_pts = []
+    y_pts = []
     line, = ax.plot(x_pts, y_pts, marker="o", linestyle='None', color='r')
     # ax.imshow(outlines[frame_num-1, :, :])
     cid = fig.canvas.mpl_connect('button_press_event', onclick)
     cid1 = fig.canvas.mpl_connect('key_press_event', keypress)
     plt.show(fig)
+    # print 'completed scene {0}, frame {1}, coordinates:'.format(scene, frame_num), coords
+    coord_list.append(coords)
+    # we now updated coord_vals each time, so that we can have a command leading us to quit the segmentation.
+    coord_vals1 = np.zeros([len(coords), 3])
+    if len(coords) > 0:  # if we were unable to find any values in this frame then there should be nothing to unpack
+        x, y = zip(*coords)
+        coord_vals1[:, 0] = i0+1
+        coord_vals1[:, 1] = x[:]
+        coord_vals1[:, 2] = y[:]
+    coord_vals = np.concatenate((coord_vals, coord_vals1), axis=0)
     temp_scenes1[i0] = 1  # indicating that we have completed that scene
-    # print 'completed scene {0}, frame {1}, coordinates:'.format(scene, frame_num)
-    # print 'Done {0} out of {1}'.format(i0, num_frames_analyzed)
+    print 'completed scene {0}, frame {1}, coordinates:'.format(scene, frame_num)
+    print 'Done {0} out of {1}'.format(i0, num_frames_analyzed)
     i0 += 1  # to track the next scene
+    np.save(directory + '/fl_loc_cells.npy', coord_vals)
     np.save(directory + '/completed_samples.npy', temp_scenes1)
     np.save(directory + '/samples.npy', temp_scenes)
+print(len(coord_list), sum([len(obj) for obj in coord_list]), coord_vals)
+np.save(directory+'/samples.npy', temp_scenes)
+np.save(directory+'/fl_loc_cells.npy', coord_vals)
+np.save(directory+'/completed_samples.npy', temp_scenes1)
