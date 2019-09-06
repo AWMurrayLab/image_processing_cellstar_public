@@ -9,7 +9,9 @@ import scipy
 import scipy.io as sio
 import matplotlib.pyplot as plt
 
-expt_ids = ['/181917_yFB79_60X_Raff_125uMGal', '/190607_yFB78_60X_Raff_125uMGal', '/181114_yFB78_Raff_125Gal']
+# expt_ids = ['/181917_yFB79_60X_Raff_125uMGal', '/190607_yFB78_60X_Raff_125uMGal', '/181114_yFB78_Raff_125Gal']
+# expt_ids = ['/190607_yFB110_60X_Raff_125uMGal']
+expt_ids = ['/190629_yFB110_60X_Raff_125uMGal']
 # '/181207_yFB79_60X_Raff_125uMGal'  # appears to have a corrupted .mat file for Scene 1 Frame 45
 # expt_ids = ['/181114_yFB78_Raff_125Gal']
 for i0 in range(len(expt_ids)):

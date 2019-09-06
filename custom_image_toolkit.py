@@ -22,6 +22,7 @@ from sklearn.svm import SVC
 from shutil import copyfile
 from skimage import feature
 from skimage import filters
+import seaborn as sns
 
 
 # helper
@@ -379,7 +380,7 @@ def add_fluorescence_traces_v2(temp_path, temp_cells, frame_list, current_frame,
     # subtracting the average background at each xy point. Structure is (z,y,x)
     # finding the blobs
     temp_im2 = skimage.filters.gaussian(temp_im1, sigma=1)
-    temp = skimage.feature.blob_log(temp_im2, min_sigma=1.0, max_sigma=2.5, num_sigma=4, threshold=0.002, overlap=0.01,
+    temp = skimage.feature.blob_log(temp_im2, min_sigma=1.0, max_sigma=2.5, num_sigma=4, threshold=0.0015, overlap=0.01,
                                     log_scale=False)  # this has the format of a numpy array Nx4, where the columns are
     # z, y, x, r where r is the radius of the circle centered at that point
     # now we plot the fitted blobs along with the outlines of the cells at this timepoint
@@ -581,6 +582,8 @@ def fit_ellipse(temp_im):
     # http://scikit-image.org/docs/dev/api/skimage.measure.html
     temp1 = temp[0].major_axis_length / 2.0
     temp2 = temp[0].minor_axis_length / 2.0
+    if temp1<temp2:
+        raise ValueError('Ellipse volume is incorrect')
     temp3 = -temp[0].orientation  # note using negative angle here since y counts down, not up in our reckoning
     temp4 = temp[0].centroid
     temp_mat = rotation(temp3)
@@ -933,6 +936,7 @@ def integrate_bud_data(temp_cycles):
             obj.segment_coords_bud = []
             obj.segment_vol_bud = []
             obj.bud_seg = []
+
             # Note that by definition we should not incorporate any bud data regarding cytoplasm vs nucleus, because
             # even if a blob is detected within a bud, while it remains classified as a bud, we have not marked a
             # localization event for Whi5. We therefore assume that any "nuclear detection" from a blob detection will
@@ -2670,6 +2674,7 @@ def timepoint_pandas_export(temp_base_path, temp_expt_paths, temp_expt_conds, te
                   not(set(zip(*obj.segment_coords[0])[1]).intersection(outline_set))]  # the list of cells that do not
             # intersect the outline of the image
             for obj in c1:
+                obj.ellipse_volume = [1.33*obj.ellipse_volume[0]*0.267**3]
                 obj.pixel_thresh_vol = [len(obj.pixel_thresh_coords[0][0])*volume_element]
                 if obj.nuclear_coords[0] is None:
                     obj.nuclear_vol = [np.nan]
@@ -2734,3 +2739,157 @@ def timepoint_plot_distribution(temp_base_path, temp_expt_paths, temp_expt_conds
             plt.ylabel('Integrated fluorescence')
             plt.legend()
             fig.savefig(temp_path+'fig_cond_{0}.png'.format(cond))
+
+
+def processing(df):
+
+    df['$c2_{b,seg}$'] = df['$F2_{b,seg}$']/df['$V_{b,seg}$']
+    df['$c2_{b,ell}$'] = df['$F2_{b,zproj}$']/df['$V_{b,ell}$']
+    df['$c2_{s,seg}$'] = df['$F2_{s,seg}$']/df['$V_{s,seg}$']
+    df['$c2_{s,ell}$'] = df['$F2_{s,zproj}$']/df['$V_{s,ell}$']
+
+    df['$c1_{b,seg}$'] = df['$F1_{b,seg}$']/df['$V_{b,seg}$']
+    df['$c1_{b,ell}$'] = df['$F1_{b,zproj}$']/df['$V_{b,ell}$']
+    df['$c1_{s,seg}$'] = df['$F1_{s,seg}$']/df['$V_{s,seg}$']
+    df['$c1_{s,ell}$'] = df['$F1_{s,zproj}$']/df['$V_{s,ell}$']
+
+    df['$F2_{k,b,seg}$'] = (df['$F2_{s,seg}$']-df['$F2_{b,seg}$'])/df['$t_{G1}$']
+    df['$F1_{k,b,seg}$'] = (df['$F1_{s,seg}$']-df['$F1_{b,seg}$'])/df['$t_{G1}$']
+    df['$F2_{k,b,zproj}$'] = (df['$F2_{s,zproj}$']-df['$F2_{b,zproj}$'])/df['$t_{G1}$']
+    df['$F1_{k,b,zproj}$'] = (df['$F1_{s,zproj}$']-df['$F1_{b,zproj}$'])/df['$t_{G1}$']
+
+    df['$V_{div,seg}$'] = df['$V_{d,seg}$']+df['$V_{bud,seg}$']
+    df['$\Delta V_{budded}$'] = df['$V_{div,seg}$']-df['$V_{s,seg}$']
+    df['$F1_{div,seg}$'] = df['$F1_{d,seg}$']+df['$F1_{bud,seg}$']
+    df['$F2_{div,seg}$'] = df['$F2_{d,seg}$']+df['$F2_{bud,seg}$']
+    df['$c1_{div,seg}$'] = df['$F1_{div,seg}$']/df['$V_{div,seg}$']
+    df['$c2_{div,seg}$'] = df['$F2_{div,seg}$']/df['$V_{div,seg}$']
+    df['$c1_{b,zproj}$'] = df['$F1_{b,zproj}$']/df['$V_{b,seg}$']
+    df['$c2_{b,zproj}$'] = df['$F2_{b,zproj}$']/df['$V_{b,seg}$']
+    df['$F1_{div,zproj}$'] = df['$F1_{d,zproj}$']+df['$F1_{bud,zproj}$']
+    df['$F2_{div,zproj}$'] = df['$F2_{d,zproj}$']+df['$F2_{bud,zproj}$']
+    df['$c1_{div,zproj}$'] = df['$F1_{div,zproj}$']/df['$V_{div,seg}$']
+    df['$c2_{div,zproj}$'] = df['$F2_{div,zproj}$']/df['$V_{div,seg}$']
+    df['$V_{div,ell}$'] = df['$V_{d,ell}$']+df['$V_{bud,ell}$']
+    df['$c1_{div,ell}$'] = df['$F1_{div,zproj}$']/df['$V_{div,ell}$']
+    df['$c2_{div,ell}$'] = df['$F2_{div,zproj}$']/df['$V_{div,ell}$']
+    df['$c1_{div,ellseg}$'] = df['$F1_{div,seg}$']/df['$V_{div,ell}$']
+    df['$c2_{div,ellseg}$'] = df['$F2_{div,seg}$']/df['$V_{div,ell}$']
+    df['$t_{div}$']=df['$t_{G1}$']+df['$t_{budded}$']
+
+    df['$\mathrm{d}c_1/\mathrm{d}t$'] = (df['$F1_{d,seg}$']-df['$F1_{b,seg}$'])/df['$t_{div}$']
+    df['$\mathrm{d}c_{1,bud}/\mathrm{d}t$'] = (df['$F1_{d,seg}$']-df['$F1_{s,seg}$'])/df['$t_{budded}$']
+    df['$\mathrm{d}c_2/\mathrm{d}t$'] = (df['$F2_{d,seg}$']-df['$F2_{b,seg}$'])/df['$t_{div}$']
+    df['$\mathrm{d}c_{2,bud}/\mathrm{d}t$'] = (df['$F2_{d,seg}$']-df['$F2_{s,seg}$'])/df['$t_{budded}$']
+    return df
+
+
+def normalize(df):
+    temp_vol_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$V_{b,seg}$'])
+    temp_F1_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$F1_{b,seg}$'])
+    temp_c1_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$c1_{b,seg}$'])
+    temp_F2_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$F2_{b,seg}$'])
+    temp_c2_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$c2_{b,seg}$'])
+
+    df['$c2_{b,seg,norm}$'] =df['$c2_{b,seg}$']/temp_c2_norm
+    df['$c2_{s,seg,norm}$'] = df['$c2_{s,seg}$']/temp_c2_norm
+    df['$c2_{div,seg,norm}$'] = df['$c2_{div,seg}$']/temp_c2_norm
+
+    df['$c1_{b,seg,norm}$'] = df['$c1_{b,seg}$']/temp_c1_norm
+    df['$c1_{s,seg,norm}$'] = df['$c1_{s,seg}$']/temp_c1_norm
+    df['$c1_{div,seg}$'] =df['$c1_{div,seg}$']/temp_c1_norm
+
+    df['$F2_{b,seg,norm}$'] = df['$F2_{b,seg}$'] / temp_F2_norm
+    df['$F1_{b,seg,norm}$'] = df['$F1_{b,seg}$'] / temp_F1_norm
+    df['$F2_{s,seg,norm}$'] = df['$F2_{s,seg}$'] / temp_F2_norm
+    df['$F1_{s,seg,norm}$'] = df['$F1_{s,seg}$'] / temp_F1_norm
+    df['$F1_{div,seg,norm}$'] = df['$F1_{div,seg}$']/temp_F1_norm
+    df['$F2_{div,seg,norm}$'] = df['$F2_{div,seg}$']/temp_F2_norm
+
+    df['$V_{div,seg,norm}$'] = df['$V_{div,seg}$']/temp_vol_norm
+    df['$\Delta V_{budded,norm}$'] =df['$\Delta V_{budded}$']/temp_vol_norm
+    df['$V_{b,seg,norm}$'] = df['$V_{b,seg}$'] / temp_vol_norm
+    df['$V_{s,seg,norm}$'] = df['$V_{s,seg}$'] / temp_vol_norm
+    return df
+
+
+def plotting_heatmap_timepoint(xv,yv,temp_df,binrange,xlab=None,ylab=None,gridsize=15,temp_title=None):
+    sns.set(font_scale=1.5)
+    sns.set_style("white")
+    # binrange = (15, 40)
+    # xv, yv = '$V_{b,ell}$', '$t_{G1}$'
+    xv1 = np.linspace(binrange[0], binrange[1], 100)
+    bins = scipy.stats.binned_statistic(temp_df[xv], temp_df[yv], statistic='mean', range=binrange)
+    bins1 = scipy.stats.binned_statistic(temp_df[xv], temp_df[yv], statistic='std', range=binrange)
+    bins2 = scipy.stats.binned_statistic(temp_df[xv], temp_df[yv], statistic='count', range=binrange)
+    fig = plt.figure()
+    plt.errorbar(x=(bins.bin_edges[1:] + bins.bin_edges[:-1]) / 2, y=bins.statistic,
+                 yerr=bins1.statistic / np.sqrt(bins2.statistic), fmt='.', color='r', elinewidth=3, capthick=3,
+                 capsize=5, label='Binned means')
+    if not (temp_title is None):
+        plt.title(temp_title)
+    plt.legend()
+    plt.hexbin(x=temp_df[xv], y=temp_df[yv], gridsize=gridsize, cmap="BuGn")
+    bottom,top = plt.ylim()
+    left,right = plt.xlim()
+    # sns_plot = sns.regplot(x=xv, y=yv, scatter=False, data=temp_df, ci=95, truncate=True)
+    plt.ylim(bottom,top)
+    plt.xlim(left,right)
+    if xlab is None:
+        plt.xlabel(xv)
+    else:
+        plt.xlabel(xlab)
+    if ylab is None:
+        plt.ylabel(yv)
+    else:
+        plt.ylabel(ylab)
+    return fig
+
+
+def plotting_heatmap(xv,yv,temp_df,binrange,xlab=None,ylab=None,gridsize=15,temp_title=None,temp_cmap=None,temp_xlim=None,temp_ylim=None):
+    # temp_xlim should be in format (left, right)
+    # temp_ylim should be in format (bottom, top)
+    # xv and yv are the column labels for data to be plotted. binrange is a tuple with the lower and upper x bounds to
+    # bin data within. Decreasing gridsize causes the grid to become larger.
+    sns.set(font_scale=1.5)
+    sns.set_style("white")
+    # binrange = (15, 40)
+    # xv, yv = '$V_{b,ell}$', '$t_{G1}$'
+    xv1 = np.linspace(binrange[0], binrange[1], 100)
+    bins = scipy.stats.binned_statistic(temp_df[xv], temp_df[yv], statistic='mean', range=binrange)
+    bins1 = scipy.stats.binned_statistic(temp_df[xv], temp_df[yv], statistic='std', range=binrange)
+    bins2 = scipy.stats.binned_statistic(temp_df[xv], temp_df[yv], statistic='count', range=binrange)
+    fig = plt.figure()
+    plt.errorbar(x=(bins.bin_edges[1:] + bins.bin_edges[:-1]) / 2, y=bins.statistic,
+                 yerr=bins1.statistic / np.sqrt(bins2.statistic), fmt='.', color='k', elinewidth=3, capthick=3,
+                 capsize=5, label='Binned means')
+    if not (temp_title is None):
+        plt.title(temp_title)
+    plt.legend()
+    if temp_cmap is None:
+        temp_cmap1='BuGn'
+    else:
+        temp_cmap1=temp_cmap
+    plt.hexbin(x=temp_df[xv], y=temp_df[yv], gridsize=gridsize, cmap=temp_cmap1)
+    if not(temp_xlim is None):
+        plt.xlim(temp_xlim[0],temp_xlim[1])
+    if not(temp_ylim is None):
+        plt.ylim(temp_ylim[0],temp_ylim[1])
+
+    bottom,top = plt.ylim()
+    left,right = plt.xlim()
+    sns_plot = sns.regplot(x=xv, y=yv, scatter=False, data=temp_df, ci=95, truncate=True)
+    plt.ylim(bottom,top)
+    plt.xlim(left,right)
+    if xlab is None:
+        plt.xlabel(xv)
+    else:
+        plt.xlabel(xlab)
+    if ylab is None:
+        plt.ylabel(yv)
+    else:
+        plt.ylabel(ylab)
+    return fig
+
+
+# def compare_PCC()

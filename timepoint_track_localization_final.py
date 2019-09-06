@@ -40,7 +40,7 @@ import os
 # timepoint experiment 3/22/19
 date = '/190322'
 expt_id = date+'_timepoint'
-completed_scenes = [0, 1, 0, 0]  # which scenes I have finished image segmentation on
+completed_scenes = [1, 1, 1, 1]  # which scenes I have finished image segmentation on
 base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190322_yFB78_yFB79_CSM_Raff_Gal'
 expt_conds = ['/yFB78_125uMGal', '/yFB78_800uMGal', '/yFB79_125uMGal', '/yFB79_800uMGal']
 expt_paths = [expt_path1+cond for cond in expt_conds]

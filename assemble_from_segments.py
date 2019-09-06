@@ -205,7 +205,7 @@ import cPickle as pickle
 
 # # yFB79 expt 190417
 #
-# expt_id = '/181917_yFB79_60X_Raff_125uMGal'
+# expt_id = '/190417_yFB79_60X_Raff_125uMGal'
 # pixel_size = {'60X': 0.267, '100X': 0.16}
 # scale = pixel_size['60X']
 # base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190417_yFB79_timelapse/timelapse'
@@ -260,33 +260,117 @@ import cPickle as pickle
 # zstep = 0.7  # distance between z steps
 # tstep = 10.0
 
-# yFB78 expt 190607
+# # yFB78 expt 190607
+#
+# expt_id = '/190607_yFB78_60X_Raff_125uMGal'
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_timelapse/timelapse'
+# image_filename, bf_filename, fl_filename = '/190607_yFB78_60X_2XCSM_2Raff_125uMGal2_', \
+#                                            'w1Brightfield confocal_', \
+#                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
+# fl_filename_c2 = 'w3594 laser 10_'  # secondary fluorescence channel
+# fluor_c2 = True
+# label_path = None  # if label_path is None then this experiment doesn't use labeling
+# manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
+# num_scenes = 13  # num_scenes should be the number of scenes to analyze + 1
+# num_frames = np.array([50, 45, 51, 51, 0, 0, 0, 51, 51, 51, 51, 30])
+# # num_frames = np.array([50, 45, 51, 51, 51, 51, 51, 51, 51, 51, 51, 30])
+# # num_frames should be the number of frames + 1. Default is the same for
+# # each field of view.
+# num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
+# bkgd_scene = 13  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+# analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
+# threshold = 10000  # threshold for visualizing log or linear fluorescence data
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+# size_thresh = False  # do we remove the largest cells?
+# zstep = 0.7  # distance between z steps
+# tstep = 12.0
 
-expt_id = '/190607_yFB78_60X_Raff_125uMGal'
+# # yFB78 expt 190606
+#
+# expt_id = '/190606_yFB78_60X_Raff_125uMGal'
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190606_yFB78_timelapse/timelapse'
+# image_filename, bf_filename, fl_filename = '/190606_yFB78_60X_2XCSM_2Raff_125uMGal_timelapse_', \
+#                                            'w1Brightfield confocal_', \
+#                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
+# fl_filename_c2 = 'w3594 laser 10_'  # secondary fluorescence channel
+# fluor_c2 = True
+# label_path = None  # if label_path is None then this experiment doesn't use labeling
+# manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
+# num_scenes = 13  # num_scenes should be the number of scenes to analyze + 1
+# num_frames = np.array([60,60,60,65,65,60,0,61,65,50,65,65])
+# # num_frames = np.array([50, 45, 51, 51, 51, 51, 51, 51, 51, 51, 51, 30])
+# # num_frames should be the number of frames + 1. Default is the same for
+# # each field of view.
+# num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
+# bkgd_scene = 13  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+# analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
+# threshold = 10000  # threshold for visualizing log or linear fluorescence data
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+# size_thresh = False  # do we remove the largest cells?
+# zstep = 0.7  # distance between z steps
+# tstep = 10.0
+
+# # yFB110 expt 190629
+#
+# expt_id = '/190629_yFB110_60X_Raff_125uMGal'
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190629_yFB110_timelapse/timelapse'
+# image_filename, bf_filename, fl_filename = '/190629_yFB110_60X_2XCSM_2Raff_125uMGal_', \
+#                                            'w1Brightfield confocal_', \
+#                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
+# fl_filename_c2 = 'w3594 laser 10_'  # secondary fluorescence channel
+# fluor_c2 = True
+# label_path = None  # if label_path is None then this experiment doesn't use labeling
+# manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
+# num_scenes = 18  # num_scenes should be the number of scenes to analyze + 1
+# num_frames = np.array([30,40,29,40,31,40,38,31,36,36,35,30,40,28,30,40,38])
+# # num_frames = np.array([50, 45, 51, 51, 51, 51, 51, 51, 51, 51, 51, 30])
+# # num_frames should be the number of frames + 1. Default is the same for
+# # each field of view.
+# num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
+# bkgd_scene = 18  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+# analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
+# threshold = 10000  # threshold for visualizing log or linear fluorescence data
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+# size_thresh = False  # do we remove the largest cells?
+# zstep = 0.7  # distance between z steps
+# tstep = 20.0
+
+# yFB78 expt 190725_timelapse
+
+expt_id = '/190725_yFB78_60X_2Raff_125uMGal'
 pixel_size = {'60X': 0.267, '100X': 0.16}
 scale = pixel_size['60X']
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_timelapse/timelapse'
-image_filename, bf_filename, fl_filename = '/190607_yFB78_60X_2XCSM_2Raff_125uMGal2_', \
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190725_yFB78_timelapse/timelapse'
+image_filename, bf_filename, fl_filename = '/190725_yFB78_60X_2XCSM_2Raff_125uMGal_', \
                                            'w1Brightfield confocal_', \
                                            'w2515 laser 10_'  # note to change fluorescence path to match laser power
 fl_filename_c2 = 'w3594 laser 10_'  # secondary fluorescence channel
 fluor_c2 = True
 label_path = None  # if label_path is None then this experiment doesn't use labeling
 manual_annotation = False  # if manual_annotation then we will use manual annotation to assign ambiguous pairs.
-num_scenes = 13  # num_scenes should be the number of scenes to analyze + 1
-num_frames = np.array([50, 45, 51, 51, 0, 0, 0, 51, 51, 51, 51, 30])
+num_scenes = 17  # num_scenes should be the number of scenes to analyze + 1
+num_frames = np.array([55,55,65,50,65,65,65,65,65,55,65,65,50,65,65,65])
 # num_frames = np.array([50, 45, 51, 51, 51, 51, 51, 51, 51, 51, 51, 30])
 # num_frames should be the number of frames + 1. Default is the same for
 # each field of view.
 num_frames_analyzed = 30  # number of analyzed timepoints for Whi5 localization
-bkgd_scene = 13  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
+bkgd_scene = None  # number of the bkgd_scene. Set equal to 1 greater than the scenes analyzed by default.
 analyzed_scene = 1  # which scene will be used to manually track Whi5 localization
 threshold = 10000  # threshold for visualizing log or linear fluorescence data
 drange = 65535.0  # image fluorescence maximum
 prog_vec = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 size_thresh = False  # do we remove the largest cells?
 zstep = 0.7  # distance between z steps
-tstep = 12.0
+tstep = 10.0
 
 
 # saving the experimental parameters so we can just load them in future.

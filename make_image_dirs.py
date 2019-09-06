@@ -166,13 +166,37 @@ import shutil
 # bf_base_name = '/190607_yFB78_60X_2XCSM_2Raff_125uMGal2_w1Brightfield confocal'
 # date = '/190607'
 
-# yFB78 CSM timelapse expt 190606_yFB78
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190606_yFB78_timelapse/timelapse'
-num_scenes = 13
-bkgd_scene = 13  # the last scene is the background
-num_frames = 74
-bf_base_name = '/190606_yFB78_60X_2XCSM_2Raff_125uMGal_timelapse_w1Brightfield confocal'
-date = '/190606'
+# # yFB78 CSM timelapse expt 190606_yFB78
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190606_yFB78_timelapse/timelapse'
+# num_scenes = 13
+# bkgd_scene = 13  # the last scene is the background
+# num_frames = 74
+# bf_base_name = '/190606_yFB78_60X_2XCSM_2Raff_125uMGal_timelapse_w1Brightfield confocal'
+# date = '/190606'
+
+# # yFB110 CSM timelapse expt 190629_yFB110
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190629_yFB110_timelapse/timelapse'
+# num_scenes = 18
+# bkgd_scene = 18  # the last scene is the background
+# num_frames = 60
+# bf_base_name = '/190629_yFB110_60X_2XCSM_2Raff_125uMGal_w1Brightfield confocal'
+# date = '/190629'
+
+# # yFB78 CSM timelapse expt 190725_yFB78
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190725_yFB78_timelapse/timelapse'
+# num_scenes = 17
+# bkgd_scene = 18  # the last scene is the background
+# num_frames = 65
+# bf_base_name = '/190725_yFB78_60X_2XCSM_2Raff_125uMGal_w1Brightfield confocal'
+# date = '/190725'
+
+# yFB79 CSM timelapse expt 190612_yFB79
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190612_yFB79_timelapse/timelapse'
+num_scenes = 15
+bkgd_scene = 15  # the last scene is the background
+num_frames = 65
+bf_base_name = '/190612_yFB79_60X_2XCSM_2Raff_125uMGal__w1Brightfield confocal'
+date = '/190612'
 
 
 bkgd_extension = '_s{0}_t{1}.TIF'.format(bkgd_scene, 1)
