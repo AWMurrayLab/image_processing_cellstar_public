@@ -51,12 +51,12 @@ print color[0]
 # fluor_c2 = True
 # zscale = 0.7
 
-# # yFB79 Raffinose experiment on 181207
-# scale = pixel_size['60X']
-# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal/timelapse'
-# timestep = 10.0
-# fluor_c2 = True
-# zscale = 0.7
+# yFB79 Raffinose experiment on 181207
+scale = pixel_size['60X']
+base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/181207_yFB79_60X_Raff_125uMGal/timelapse'
+timestep = 10.0
+fluor_c2 = True
+zscale = 0.7
 
 # # yFB79 Raffinose experiment on 190417
 # scale = pixel_size['60X']
@@ -65,13 +65,34 @@ print color[0]
 # fluor_c2 = True
 # zscale = 0.7
 
-# yFB78 Raffinose experiment on 190606
-scale = pixel_size['60X']
-base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190606_yFB78_timelapse/timelapse'
-timestep = 10.0
-fluor_c2 = True
-zscale = 0.7
+# # yFB78 Raffinose experiment on 190606
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190606_yFB78_timelapse/timelapse'
+# timestep = 10.0
+# fluor_c2 = True
+# zscale = 0.7
 
+# # yFB79 Raffinose experiment on 190612
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190612_yFB79_timelapse/timelapse'
+# timestep = 12.0
+# fluor_c2 = True
+# zscale = 0.7
+
+# # yFB78 Raffinose experiment on 190725
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190725_yFB78_timelapse/timelapse'
+# timestep = 10.0
+# fluor_c2 = True
+# zscale = 0.7
+#
+# # yFB78 Raffinose experiment on 190607
+# scale = pixel_size['60X']
+# base_path, expt_path = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_timelapse/timelapse'
+# timestep = 12.0
+# fluor_c2 = True
+# zscale = 0.7
+#
 
 # Fluor linear slope vs vb from birth to start
 # Fluor pointwise slope from Start to division
@@ -136,7 +157,7 @@ if fluor_c2:
     plt.legend()
     plt.title('Dilution factor due to growth in G1')
     fig.savefig(directory + '/post_start_dilution_traces_thresh_post_birth_full_pop.png', bbox_inches='tight',
-                dpi=fig.dpi)
+                dpi=300)
     del fig
 
     fig = plt.figure(figsize=[5, 5])
@@ -201,9 +222,9 @@ if fluor_c2:
         print 'threshold', thresh
         # print np.nanmean(yv, axis=0)[:thresh]
         temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
-                          label=' dilution factor. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
-        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
-                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+                          label=' dilution factor', linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh]/np.sqrt(np.sum(np.isnan(yv),axis=0))[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh]/np.sqrt(np.sum(np.isnan(yv),axis=0))[:thresh], alpha=0.2)
         # print np.nanmean(yv, axis=0)[:thresh]
         yv = np.full([len(xv), np.amax(xv)], np.nan)
         for i0 in range(len(filt_cc)):
@@ -214,9 +235,9 @@ if fluor_c2:
         print 'threshold', thresh
         # print np.nanmean(yv, axis=0)[:thresh]
         temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
-                          label=r' $P_{ACT1}$'+'. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
-        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
-                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+                          label=r' mCherry', linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh]/np.sqrt(np.sum(np.isnan(yv),axis=0))[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh]/np.sqrt(np.sum(np.isnan(yv),axis=0))[:thresh], alpha=0.2)
         yv = np.full([len(xv), np.amax(xv)], np.nan)
         for i0 in range(len(filt_cc)):
             yv[i0, :xv[i0]] = np.asarray(filt_cc[i0].zproj_fl[:filt_cc[i0].start]) / np.asarray(
@@ -226,15 +247,15 @@ if fluor_c2:
         print 'threshold', thresh
         # print np.nanmean(yv, axis=0)[:thresh]
         temp_p = plt.plot(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh],
-                          label=r' $P_{WHI5}$'+'. Cell num={0}'.format(len(xv)), linewidth=2, alpha=0.8)
-        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh],
-                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh], alpha=0.2)
+                          label=r' Whi5', linewidth=2, alpha=0.8)
+        plt.fill_between(xv1[:thresh], np.nanmean(yv, axis=0)[:thresh] - np.nanstd(yv, axis=0)[:thresh]/np.sqrt(np.sum(np.isnan(yv),axis=0))[:thresh],
+                         np.nanmean(yv, axis=0)[:thresh] + np.nanstd(yv, axis=0)[:thresh]/np.sqrt(np.sum(np.isnan(yv),axis=0))[:thresh], alpha=0.2)
 
     plt.ylabel('Relative dilution')
     plt.xlabel('Time post cell birth')
     plt.legend()
-    plt.title('Dilution factor due to growth in G1')
-    fig.savefig(directory + '/g1_dilution_traces_thresh_post_birth_full_pop.png', bbox_inches='tight', dpi=fig.dpi)
+    plt.title('Dilution factor due to growth in G1.'+' Cell num={0}'.format(len(xv)))
+    fig.savefig(directory + '/g1_dilution_traces_thresh_post_birth_full_pop.png', bbox_inches='tight', dpi=300)
     del fig
 
 

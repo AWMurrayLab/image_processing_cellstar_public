@@ -5,6 +5,8 @@ from skimage import io
 import cPickle as pickle
 import custom_image_toolkit as C
 import os
+import scipy
+from scipy import stats
 
 pixel_size = {'60X': 0.267, '100X': 0.16}
 drange = 65535.0
@@ -34,7 +36,10 @@ drange = 65535.0
 
 # expt_ids = ['/190629_yFB110_60X_Raff_125uMGal']
 
-expt_ids = ['/190725_yFB78_60X_2Raff_125uMGal']
+# expt_ids = ['/190725_yFB78_60X_2Raff_125uMGal']
+
+expt_ids = ['/190606_yFB78_60X_Raff_125uMGal', '/190607_yFB78_60X_Raff_125uMGal', '/190725_yFB78_60X_2Raff_125uMGal',
+            '/181207_yFB79_60X_Raff_125uMGal', '/190417_yFB79_60X_Raff_125uMGal', '/190612_yFB79_timelapse']
 
 for expt_id in expt_ids:
     pickle_in = open("./expt_ids"+expt_id+'.pickle',"rb")
@@ -231,6 +236,7 @@ for expt_id in expt_ids:
     for i0 in range(len(cc)):
         obj = cc[i0]
         data_vals[i0] += [nucl_vol(obj.nuclear_coords[0])]
+
     # #
     # cols += []
     # for i0 in range(len(cc)):
@@ -247,4 +253,82 @@ for expt_id in expt_ids:
     for i in range(len(data_vals)):
         # print i, data_vals[i]
         df.loc[i] = data_vals[i]
+
+    # now we add values for the fitted slopes of dV/dt, dF1/dt, dF2/dt
+    temp_name = '$dV_{fitted,ell}/dt$'
+    yv = [(np.asarray(obj.ellipse_volume) + np.asarray(obj.vbud)) * ep['scale'] ** 3 for obj in cc]  # ell vol
+    xv = [(np.asarray(range(len(obj.frames))) - obj.start) * ep['tstep'] for obj in cc]
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], yv[ind])
+        temp[ind] = vals[0]  # adding the linear regression
+    df[temp_name] = temp
+
+    temp_name = '$dV_{fitted,seg}/dt$'
+    yv = [(np.asarray(obj.pixel_thresh_vol) + np.asarray(obj.segment_vol_bud)) * ep['scale'] ** 3 for obj in
+          cc]  # seg vol
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], yv[ind])
+        temp[ind] = vals[0]  # adding the linear regression
+    df[temp_name] = temp
+
+    temp_name = '$dF1_{fitted,seg}/dt$'
+    yv = [(np.asarray(obj.pixel_thresh_fluor_vals) + np.asarray(obj.segment_fl_bud)) for obj in cc]  # F1 seg
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], yv[ind])
+        temp[ind] = vals[0]  # adding the linear regression
+    df[temp_name] = temp
+
+    temp_name = '$dF1_{fitted,zproj}/dt$'
+    yv = [(np.asarray(obj.zproj_fl) + np.asarray(obj.zproj_fl_bud)) for obj in cc]  # F1 zproj
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], yv[ind])
+        temp[ind] = vals[0]  # adding the linear regression
+    df[temp_name] = temp
+
+    temp_name = '$dF2_{fitted,seg}/dt$'
+    yv = [(np.asarray(obj.pixel_thresh_fluor_vals_c2) + np.asarray(obj.segment_fl_bud_c2)) for obj in cc]  # F2 seg
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], yv[ind])
+        temp[ind] = vals[0]  # adding the linear regression
+    df[temp_name] = temp
+
+    temp_name = '$dF2_{fitted,zproj}/dt$'
+    yv = [(np.asarray(obj.zproj_fl_c2) + np.asarray(obj.zproj_fl_bud_c2)) for obj in cc]  # F2 zproj
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], yv[ind])
+        temp[ind] = vals[0]  # adding the linear regression
+    df[temp_name] = temp
+
+    # now we add values for the fitted slopes of dV/dt, dF1/dt, dF2/dt
+    temp_name = '$d ln(V_{ell})/dt$'
+    yv = [(np.asarray(obj.ellipse_volume) + np.asarray(obj.vbud)) * ep['scale'] ** 3 for obj in cc]  # ell vol
+    xv = [(np.asarray(range(len(obj.frames))) - obj.start) * ep['tstep'] for obj in cc]
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], np.log(yv[ind]))
+        temp[ind] = vals[0]  # adding the linear regression slope
+    df[temp_name] = temp
+
+    temp_name = '$dln(F1_{seg})/dt$'
+    yv = [(np.asarray(obj.pixel_thresh_fluor_vals) + np.asarray(obj.segment_fl_bud)) for obj in cc]  # F1 seg
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], np.log(yv[ind]))
+        temp[ind] = vals[0]  # adding the linear regression
+    df[temp_name] = temp
+
+    temp_name = '$dln(F2_{seg})/dt$'
+    yv = [(np.asarray(obj.pixel_thresh_fluor_vals_c2) + np.asarray(obj.segment_fl_bud_c2)) for obj in cc]  # F2 seg
+    temp = np.zeros(len(cc))
+    for ind in range(len(cc)):
+        vals = scipy.stats.linregress(xv[ind], np.log(yv[ind]))
+        temp[ind] = vals[0]  # adding the linear regression
+    df[temp_name] = temp
+
     df.to_pickle('./expt_ids'+expt_id+'.pkl')

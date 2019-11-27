@@ -33,14 +33,34 @@ import shutil
 #                 '/190417_yFB79_60X_timepoint_2XCSM_2Raff_125uMGal_w1Brightfield confocal']
 # date = '/190417'
 
-# yFB78 CSM timepoint expt 190607
-base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_800uMGal_timepoint'
-expt_conds = ['/yFB78_800uMGal']
-bkgd_scene = [1]  # the first scene is the bkgd
-num_scenes = [101]
+# # yFB78 CSM timepoint expt 190607
+# base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_800uMGal_timepoint'
+# expt_conds = ['/yFB78_800uMGal']
+# bkgd_scene = [1]  # the first scene is the bkgd
+# num_scenes = [101]
+# # number of frames including first background. Note some later frames have a second background
+# bf_base_name = ['/190607_yFB78_60X_2XCSM_2Raff_800uMGal_w1Brightfield confocal']
+# date = '/190417'
+
+# # yFB78, 79 CSM timepoint expt 191009
+# base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/191009_yFB78_yFB79_timepoint'
+# expt_conds = ['/yFB78_800uMGal','/yFB79_800uMGal']
+# bkgd_scene = [101,101]  # the first scene is the bkgd
+# num_scenes = [101,101]
+# # number of frames including first background. Note some later frames have a second background
+# bf_base_name = ['/191009_yFB78_800uMGal_60X_w1Brightfield confocal','/191009_yFB79_800uMGal_60X1_w1Brightfield confocal']
+# date = '/191009'
+
+# yFB29 CSM timepoint expt 191120
+base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/191120_yFB29_timepoint_variable_Gal'
+expt_conds = ['/100uMGal','/200uMGal','/400uMGal','/800uMGal']
+bkgd_scene = [101,102,101,101]  # the first scene is the bkgd
+num_scenes = [101,102,101,101]
 # number of frames including first background. Note some later frames have a second background
-bf_base_name = ['/190607_yFB78_60X_2XCSM_2Raff_800uMGal_w1Brightfield confocal']
-date = '/190417'
+bf_base_name = ['/191120_yFB29_100uMGal_60X_w1Brightfield confocal','/191120_yFB29_200uMGal_60X1_w1Brightfield confocal',
+                '/191120_yFB29_400uMGal_60X_w1Brightfield confocal','/191120_yFB29_8000uMGal_60X_w1Brightfield confocal']
+date = '/191120'
+
 
 for i0 in range(len(expt_conds)):
     expt_path = expt_path1+expt_conds[i0]

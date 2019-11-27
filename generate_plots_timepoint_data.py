@@ -59,7 +59,7 @@ df1.loc[x&y,'pixel_thresh_fluor_vals_av_c2'] = df1[x&y].pixel_thresh_fluor_vals_
 
 bp = '/home/felix/Dropbox/19_whi5_dilution_paper/plots/correlations_perturbation/'
 titles={'pGAL1-WHI5-mVenNB':r'$P_{GAL1}$ perturbed cells','pWHI5-WHI5-mVenNB':r'$P_{WHI5}$ unperturbed cells'}
-
+grid=[]
 #-------------------------------------------
 y1, w1,z1=1,'125uMGal','pWHI5-WHI5-mVenNB'
 x1 = df1.pixel_thresh_fluor_vals_av<4.0
@@ -67,9 +67,11 @@ x2 = df1.ellipse_volume<200
 w11 = df1.gal_conc == w1
 temp_xv,temp_yv,save_ext='ellipse_volume','pixel_thresh_fluor_vals_av','c1_vg1_timepoint'
 temp_xlab, temp_ylab = 'G1 volume (fL)', '[Whi5] (a.u.)'
-bin_range=(10,180)
+bin_range=(20,120)
 y,z,save_path=df1.nuclear_whi5==y1,df1.genotype==z1,bp+str(y1)+'_'+z1[:5]+'_'+save_ext+'.png'
 fig=c.plotting_heatmap(temp_xv,temp_yv,df1[y&z&x1&x2&w11],bin_range,xlab=temp_xlab,ylab=temp_ylab,temp_title=titles[z1],gridsize=30,temp_cmap='Oranges')
+plt.xlim(xmin=0,xmax=140)
+plt.ylim(ymin=0.2,ymax=2.0)
 fig.savefig(save_path,bbox_inches='tight',dpi=500)
 xlim = plt.xlim()  # we want each comparison plot to look the same so we get the axes from the first and give it to the second
 ylim = plt.ylim()
@@ -81,9 +83,11 @@ x2 = df1.ellipse_volume<200
 w11 = df1.gal_conc == w1
 temp_xv,temp_yv,save_ext='ellipse_volume','pixel_thresh_fluor_vals_av','c1_vg1_timepoint'
 temp_xlab, temp_ylab = 'G1 volume (fL)', '[Whi5] (a.u.)'
-bin_range=(10,180)
+bin_range=(20,120)
 y,z,save_path=df1.nuclear_whi5==y1,df1.genotype==z1,bp+str(y1)+'_'+z1[:5]+'_'+save_ext+'.png'
 fig=c.plotting_heatmap(temp_xv,temp_yv,df1[y&z&x1&x2&w11],bin_range,xlab=temp_xlab,ylab=temp_ylab,temp_title=titles[z1],gridsize=[40,30],temp_cmap='Blues', temp_xlim=xlim, temp_ylim=ylim)
+plt.xlim(xmin=0,xmax=140)
+plt.ylim(ymin=0.2,ymax=2.0)
 fig.savefig(save_path,bbox_inches='tight',dpi=500)
 plt.clf()
 #-------------------------------------------
@@ -93,9 +97,11 @@ x2 = df1.ellipse_volume<200
 w11 = df1.gal_conc == w1
 temp_xv,temp_yv,save_ext='ellipse_volume','pixel_thresh_fluor_vals_av_c2','c2_vg1_timepoint'
 temp_xlab, temp_ylab = 'G1 volume (fL)', '[mCherry] (a.u.)'
-bin_range=(10,180)
+bin_range=(20,120)
 y,z,save_path=df1.nuclear_whi5==y1,df1.genotype==z1,bp+str(y1)+'_'+z1[:5]+'_'+save_ext+'.png'
 fig=c.plotting_heatmap(temp_xv,temp_yv,df1[y&z&x1&x2&w11],bin_range,xlab=temp_xlab,ylab=temp_ylab,temp_title=titles[z1],gridsize=30,temp_cmap='Oranges')
+plt.xlim(xmin=0,xmax=140)
+plt.ylim(ymin=0.2,ymax=2.0)
 fig.savefig(save_path,bbox_inches='tight',dpi=500)
 xlim = plt.xlim()  # we want each comparison plot to look the same so we get the axes from the first and give it to the second
 ylim = plt.ylim()
@@ -107,9 +113,11 @@ x2 = df1.ellipse_volume<200
 w11 = df1.gal_conc == w1
 temp_xv,temp_yv,save_ext='ellipse_volume','pixel_thresh_fluor_vals_av_c2','c2_vg1_timepoint'
 temp_xlab, temp_ylab = 'G1 volume (fL)', '[mCherry] (a.u.)'
-bin_range=(10,180)
+bin_range=(20,120)
 y,z,save_path=df1.nuclear_whi5==y1,df1.genotype==z1,bp+str(y1)+'_'+z1[:5]+'_'+save_ext+'.png'
 fig=c.plotting_heatmap(temp_xv,temp_yv,df1[y&z&x1&x2&w11],bin_range,xlab=temp_xlab,ylab=temp_ylab,temp_title=titles[z1],gridsize=[45,15],temp_cmap='Blues', temp_xlim=xlim, temp_ylim=ylim)
+plt.xlim(xmin=0,xmax=140)
+plt.ylim(ymin=0.2,ymax=2.0)
 fig.savefig(save_path,bbox_inches='tight',dpi=500)
 plt.clf()
 #-------------------------------------------

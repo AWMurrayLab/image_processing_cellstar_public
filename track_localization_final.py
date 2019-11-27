@@ -29,8 +29,11 @@ import cPickle as pickle
 # # yFB78 expt 190606
 # expt_id = '/190606_yFB78_60X_Raff_125uMGal'
 
-# yFB78 expt 190725
-expt_id = '/190725_yFB78_60X_2Raff_125uMGal'
+# # yFB78 expt 190725
+# expt_id = '/190725_yFB78_60X_2Raff_125uMGal'
+
+# yFB79 expt 190612_timelapse
+expt_id = '/190612_yFB79_timelapse'
 
 pickle_in = open("./expt_ids"+expt_id+'.pickle',"rb")
 ep = pickle.load(pickle_in)  # this gives us the experimental parameters, so that we can load everything in an

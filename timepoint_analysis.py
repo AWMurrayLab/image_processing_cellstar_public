@@ -83,29 +83,50 @@ import cPickle as pickle
 # threshold = 10000
 # thresh_blobs = [0.003, 0.003]
 
-# timepoint experiment 800uM Gal 6/7/19
-date = '/190607'
+# # timepoint experiment 800uM Gal 6/7/19
+# date = '/190607'
+# expt_id = date+'_timepoint'
+# completed_scenes = [1]  # which scenes I have finished image segmentation on
+# base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_800uMGal_timepoint'
+# expt_conds = ['/yFB78_800uMGal']
+# expt_paths = [expt_path1+cond for cond in expt_conds]
+# bkgd_scenes = [1]  # the first scene is not always the bkgd
+# num_scenes = [101]  # exact number of scenes to be analyzed
+# # number of frames including first background. Note some later frames have a second background
+# image_filenames = ['/190607_yFB78_60X_2XCSM_2Raff_800uMGal']
+# bf_filename = '_w1Brightfield confocal'
+# fl_filename = '_w2515 laser 30'
+# fl_filename_c2 = '_w3594 laser 30'
+# date = '/190607'
+# pixel_size = {'60X': 0.267, '100X': 0.16}
+# zstep = 0.7  # distance between z steps
+# drange = 65535.0  # image fluorescence maximum
+# prog_vec = [[0, 0, 0, 0, 0]]  # one column for each condition
+# num_frames_analyzed = 30
+# threshold = 10000
+# thresh_blobs = [0.05]
+
+# timepoint experiment 800uM Gal 10/9/19
+date = '/191009'
 expt_id = date+'_timepoint'
-completed_scenes = [1]  # which scenes I have finished image segmentation on
-base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/190607_yFB78_800uMGal_timepoint'
-expt_conds = ['/yFB78_800uMGal']
+completed_scenes = [1,1]  # which scenes I have finished image segmentation on
+base_path, expt_path1 = '/scratch/lab/image_analysis_scratch', '/191009_yFB78_yFB79_timepoint'
+expt_conds = ['/yFB78_800uMGal','/yFB79_800uMGal']
 expt_paths = [expt_path1+cond for cond in expt_conds]
-bkgd_scenes = [1]  # the first scene is not always the bkgd
-num_scenes = [101]  # exact number of scenes to be analyzed
+bkgd_scenes = [101,101]  # the first scene is not always the bkgd
+num_scenes = [101,101]  # exact number of scenes to be analyzed
 # number of frames including first background. Note some later frames have a second background
-image_filenames = ['/190607_yFB78_60X_2XCSM_2Raff_800uMGal']
+image_filenames = ['/191009_yFB78_800uMGal_60X','/191009_yFB79_800uMGal_60X1']
 bf_filename = '_w1Brightfield confocal'
 fl_filename = '_w2515 laser 30'
 fl_filename_c2 = '_w3594 laser 30'
-date = '/190607'
 pixel_size = {'60X': 0.267, '100X': 0.16}
 zstep = 0.7  # distance between z steps
 drange = 65535.0  # image fluorescence maximum
-prog_vec = [[0, 0, 0, 0, 0]]  # one column for each condition
+prog_vec = [[0, 0, 0, 0, 0],[0, 0, 0, 0, 0]]  # one column for each condition
 num_frames_analyzed = 30
 threshold = 10000
-thresh_blobs = [0.05]
-
+thresh_blobs = [0.01,0.003]
 
 
 # saving the experimental parameters so we can just load them in future.

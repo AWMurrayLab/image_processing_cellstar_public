@@ -2759,7 +2759,7 @@ def processing(df):
     df['$F1_{k,b,zproj}$'] = (df['$F1_{s,zproj}$']-df['$F1_{b,zproj}$'])/df['$t_{G1}$']
 
     df['$V_{div,seg}$'] = df['$V_{d,seg}$']+df['$V_{bud,seg}$']
-    df['$\Delta V_{budded}$'] = df['$V_{div,seg}$']-df['$V_{s,seg}$']
+    df['$\Delta V_{budded,seg}$'] = df['$V_{div,seg}$']-df['$V_{s,seg}$']
     df['$F1_{div,seg}$'] = df['$F1_{d,seg}$']+df['$F1_{bud,seg}$']
     df['$F2_{div,seg}$'] = df['$F2_{d,seg}$']+df['$F2_{bud,seg}$']
     df['$c1_{div,seg}$'] = df['$F1_{div,seg}$']/df['$V_{div,seg}$']
@@ -2771,45 +2771,50 @@ def processing(df):
     df['$c1_{div,zproj}$'] = df['$F1_{div,zproj}$']/df['$V_{div,seg}$']
     df['$c2_{div,zproj}$'] = df['$F2_{div,zproj}$']/df['$V_{div,seg}$']
     df['$V_{div,ell}$'] = df['$V_{d,ell}$']+df['$V_{bud,ell}$']
+    df['$\Delta V_{budded,ell}$'] = df['$V_{div,ell}$'] - df['$V_{s,ell}$']
+    df['$\Delta V_{G1,ell}$'] = df['$V_{s,ell}$']-df['$V_{b,ell}$']
+    df['$\Delta V_{full,ell}$'] = df['$V_{div,ell}$'] - df['$V_{b,ell}$']
     df['$c1_{div,ell}$'] = df['$F1_{div,zproj}$']/df['$V_{div,ell}$']
     df['$c2_{div,ell}$'] = df['$F2_{div,zproj}$']/df['$V_{div,ell}$']
     df['$c1_{div,ellseg}$'] = df['$F1_{div,seg}$']/df['$V_{div,ell}$']
     df['$c2_{div,ellseg}$'] = df['$F2_{div,seg}$']/df['$V_{div,ell}$']
     df['$t_{div}$']=df['$t_{G1}$']+df['$t_{budded}$']
 
-    df['$\mathrm{d}c_1/\mathrm{d}t$'] = (df['$F1_{d,seg}$']-df['$F1_{b,seg}$'])/df['$t_{div}$']
-    df['$\mathrm{d}c_{1,bud}/\mathrm{d}t$'] = (df['$F1_{d,seg}$']-df['$F1_{s,seg}$'])/df['$t_{budded}$']
-    df['$\mathrm{d}c_2/\mathrm{d}t$'] = (df['$F2_{d,seg}$']-df['$F2_{b,seg}$'])/df['$t_{div}$']
-    df['$\mathrm{d}c_{2,bud}/\mathrm{d}t$'] = (df['$F2_{d,seg}$']-df['$F2_{s,seg}$'])/df['$t_{budded}$']
+    df['$\mathrm{d}c_1/\mathrm{d}t$'] = (df['$F1_{div,seg}$']-df['$F1_{b,seg}$'])/df['$t_{div}$']
+    df['$\mathrm{d}c_{1,bud}/\mathrm{d}t$'] = (df['$F1_{div,seg}$']-df['$F1_{s,seg}$'])/df['$t_{budded}$']
+    df['$\mathrm{d}c_2/\mathrm{d}t$'] = (df['$F2_{div,seg}$']-df['$F2_{b,seg}$'])/df['$t_{div}$']
+    df['$\mathrm{d}c_{2,bud}/\mathrm{d}t$'] = (df['$F2_{div,seg}$']-df['$F2_{s,seg}$'])/df['$t_{budded}$']
+    df['$\mathrm{d}V/\mathrm{d}t$'] = (df['$V_{div,ell}$'] - df['$V_{b,ell}$']) / df['$t_{div}$']
+    df['$\mathrm{d}V/\mathrm{d}t/V_b$'] = (df['$V_{div,ell}$'] - df['$V_{b,ell}$']) / (df['$t_{div}$']*df['$V_{b,ell}$'])
     return df
 
 
 def normalize(df):
-    temp_vol_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$V_{b,seg}$'])
-    temp_F1_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$F1_{b,seg}$'])
-    temp_c1_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$c1_{b,seg}$'])
-    temp_F2_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$F2_{b,seg}$'])
-    temp_c2_norm = np.mean(df[df['genotype']=='pWHI5-WHI5']['$c2_{b,seg}$'])
+    for temp in df.expt.unique():
+        x=df.expt==temp
+        temp_vol_norm = np.mean(df[x]['$V_{b,seg}$'])
+        temp_F1_norm = np.mean(df[x]['$F1_{b,seg}$'])
+        temp_c1_norm = np.mean(df[x]['$c1_{b,seg}$'])
+        temp_F2_norm = np.mean(df[x]['$F2_{b,seg}$'])
+        temp_c2_norm = np.mean(df[x]['$c2_{b,seg}$'])
+        df.loc[x,'$c2_{b,seg,norm}$'] =df[x]['$c2_{b,seg}$']/temp_c2_norm
+        df.loc[x,'$c2_{s,seg,norm}$'] = df[x]['$c2_{s,seg}$']/temp_c2_norm
+        df.loc[x,'$c2_{div,seg,norm}$'] = df[x]['$c2_{div,seg}$']/temp_c2_norm
+        df.loc[x,'$c1_{b,seg,norm}$'] = df[x]['$c1_{b,seg}$']/temp_c1_norm
+        df.loc[x,'$c1_{s,seg,norm}$'] = df[x]['$c1_{s,seg}$']/temp_c1_norm
+        df.loc[x,'$c1_{div,seg}$'] =df[x]['$c1_{div,seg}$']/temp_c1_norm
 
-    df['$c2_{b,seg,norm}$'] =df['$c2_{b,seg}$']/temp_c2_norm
-    df['$c2_{s,seg,norm}$'] = df['$c2_{s,seg}$']/temp_c2_norm
-    df['$c2_{div,seg,norm}$'] = df['$c2_{div,seg}$']/temp_c2_norm
+        df.loc[x,'$F2_{b,seg,norm}$'] = df[x]['$F2_{b,seg}$'] / temp_F2_norm
+        df.loc[x,'$F1_{b,seg,norm}$'] = df[x]['$F1_{b,seg}$'] / temp_F1_norm
+        df.loc[x,'$F2_{s,seg,norm}$'] = df[x]['$F2_{s,seg}$'] / temp_F2_norm
+        df.loc[x,'$F1_{s,seg,norm}$'] = df[x]['$F1_{s,seg}$'] / temp_F1_norm
+        df.loc[x,'$F1_{div,seg,norm}$'] = df[x]['$F1_{div,seg}$']/temp_F1_norm
+        df.loc[x,'$F2_{div,seg,norm}$'] = df[x]['$F2_{div,seg}$']/temp_F2_norm
 
-    df['$c1_{b,seg,norm}$'] = df['$c1_{b,seg}$']/temp_c1_norm
-    df['$c1_{s,seg,norm}$'] = df['$c1_{s,seg}$']/temp_c1_norm
-    df['$c1_{div,seg}$'] =df['$c1_{div,seg}$']/temp_c1_norm
-
-    df['$F2_{b,seg,norm}$'] = df['$F2_{b,seg}$'] / temp_F2_norm
-    df['$F1_{b,seg,norm}$'] = df['$F1_{b,seg}$'] / temp_F1_norm
-    df['$F2_{s,seg,norm}$'] = df['$F2_{s,seg}$'] / temp_F2_norm
-    df['$F1_{s,seg,norm}$'] = df['$F1_{s,seg}$'] / temp_F1_norm
-    df['$F1_{div,seg,norm}$'] = df['$F1_{div,seg}$']/temp_F1_norm
-    df['$F2_{div,seg,norm}$'] = df['$F2_{div,seg}$']/temp_F2_norm
-
-    df['$V_{div,seg,norm}$'] = df['$V_{div,seg}$']/temp_vol_norm
-    df['$\Delta V_{budded,norm}$'] =df['$\Delta V_{budded}$']/temp_vol_norm
-    df['$V_{b,seg,norm}$'] = df['$V_{b,seg}$'] / temp_vol_norm
-    df['$V_{s,seg,norm}$'] = df['$V_{s,seg}$'] / temp_vol_norm
+        df.loc[x,'$V_{div,seg,norm}$'] = df[x]['$V_{div,seg}$']/temp_vol_norm
+        df.loc[x,'$\Delta V_{budded,norm,seg}$'] =df[x]['$\Delta V_{budded,seg}$']/temp_vol_norm
+        df.loc[x,'$V_{b,seg,norm}$'] = df[x]['$V_{b,seg}$'] / temp_vol_norm
+        df.loc[x,'$V_{s,seg,norm}$'] = df[x]['$V_{s,seg}$'] / temp_vol_norm
     return df
 
 
